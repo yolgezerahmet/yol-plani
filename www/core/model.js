@@ -37,20 +37,24 @@ export function bolumHesap(b, hiz, k) {
   return { wh: b.km > 0 ? kwh / b.km * 1000 : 0, kwh, dk: b.km / (Math.max(5, hiz) * TIP[b.tip].akis) * 60 };
 }
 
-// 63 kWh E-GMP, 800 V istasyon. Ölçülen %10→80: 350 kW'ta 18 dk, 150 kW'ta 22 dk, 50 kW'ta 53 dk.
+// Referans eğri: 63 kWh E-GMP, 800 V istasyon; diğer bataryalar sarjOlcek ile ölçeklenir (bkz. arac.js).
+// Ölçülen %10→80: 350 kW'ta 18 dk, 150 kW'ta 22 dk, 50 kW'ta 53 dk.
 const EGRI = [[0, 110], [5, 150], [10, 165], [45, 175], [55, 145], [70, 125], [78, 95], [82, 55], [90, 32], [100, 8]];
-export function sarjGucu(soc) {
+function temelGuc(soc) {
   for (let i = 1; i < EGRI.length; i++) {
     const [a, pa] = EGRI[i - 1], [c, pc] = EGRI[i];
     if (soc <= c) return pa + (pc - pa) * (soc - a) / (c - a);
   }
   return 8;
 }
-export function sarjDk(s0, s1, istasyonKw, kap) {
+export function sarjGucu(soc, olcek = 1) {
+  return olcek * temelGuc(soc);
+}
+export function sarjDk(s0, s1, istasyonKw, kap, olcek = 1) {
   let saat = 0;
   for (let s = Math.floor(s0); s < s1; s++) {
     const bas = Math.max(s, s0), son = Math.min(s + 1, s1);
-    saat += kap * (son - bas) / 100 / Math.min(sarjGucu(s + 0.5), istasyonKw * 0.93);
+    saat += kap * (son - bas) / 100 / Math.min(sarjGucu(s + 0.5, olcek), istasyonKw * 0.93);
   }
   return saat * 60;
 }
@@ -70,7 +74,7 @@ export function hesapla(bolumler, k, hizFn) {
       if (d.tur === 'sarj') {
         const hedef = Math.min(100, +d.hedef || 80), s0 = Math.max(0, soc);
         if (hedef > s0) {
-          const dk = sarjDk(s0, hedef, +d.kw || 50, k.kap) + k.sabitdk;
+          const dk = sarjDk(s0, hedef, +d.kw || 50, k.kap, k.sarjOlcek || 1) + k.sabitdk;
           const ek = (hedef - s0) / 100 * k.kap, tl = ek / 0.95 * (+d.fiyat || 0);
           durakDk += dk; maliyet += tl; r.durak = { dk, ek, tl, sonra: hedef }; soc = hedef;
         } else r.durak = { dk: 0, ek: 0, tl: 0, sonra: soc, gereksiz: true };
