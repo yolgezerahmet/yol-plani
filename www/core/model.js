@@ -30,11 +30,16 @@ export function whKm(tip, hiz, k) {
   return (Fa + Fr) / 3.6 / k.verim * t.f + yardimci * 1000 / (h * t.akis);
 }
 
-// Bir bölümün enerjisi (kWh), ortalama Wh/km ve süresi (dk). b: {tip, km, dh}
+// Rota motoru bölüm için akisOrani (Valhalla ölçülü) ve tırmanış/iniş verdiyse onlar kullanılır;
+// elle girilen bölümlerde yol tipinin varsayılanı ve net rakım farkı geçerlidir.
 export function bolumHesap(b, hiz, k) {
-  const Eh = (k.bos + k.yuk) * G * b.dh / 3600 / 1000;
-  const kwh = whKm(b.tip, hiz, k) * b.km / 1000 + (b.dh >= 0 ? Eh / k.verim : Eh * 0.75);
-  return { wh: b.km > 0 ? kwh / b.km * 1000 : 0, kwh, dk: b.km / (Math.max(5, hiz) * TIP[b.tip].akis) * 60 };
+  const m = k.bos + k.yuk;
+  const yerceken = b.cikis != null && b.inis != null
+    ? (m * G * b.cikis / 3600 / 1000) / k.verim - (m * G * b.inis / 3600 / 1000) * 0.75
+    : (b.dh >= 0 ? (m * G * b.dh / 3600 / 1000) / k.verim : (m * G * b.dh / 3600 / 1000) * 0.75);
+  const kwh = whKm(b.tip, hiz, k) * b.km / 1000 + yerceken + (b.gecisKayipKwh || 0);
+  const akis = b.akisOrani || TIP[b.tip].akis;
+  return { wh: b.km > 0 ? kwh / b.km * 1000 : 0, kwh, dk: b.km / (Math.max(5, hiz) * akis) * 60 };
 }
 
 // Referans eğri: 63 kWh E-GMP, 800 V istasyon; diğer bataryalar sarjOlcek ile ölçeklenir (bkz. arac.js).
