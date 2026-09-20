@@ -1,5 +1,7 @@
 // Tüketim, süre ve şarj modeli. Saf fonksiyonlar: arayüzden ve OBD katmanından bağımsız test edilir.
+// Fiziksel alt katman fizik.js'te; buradaki işlevler onu bölüm ölçeğine uygular.
 // Kalibrasyon hedefleri (EV Database, IONIQ 5 63 kWh RWD): 110 km/h 20 °C ≈ 190 Wh/km, −10 °C ≈ 245 Wh/km.
+import { SABIT, havaYogunlugu as ro, basincTahmini, akisDirenci, ruzgarBilesenleri, yardimciKw, inisGeriKazanim } from './fizik.js';
 
 export const TIP = {
   otoyol:   { ad: 'Otoyol',               f: 1.00, akis: 0.97, limit: 130, hiz: 115, renk: '--otoyol' },
@@ -10,36 +12,49 @@ export const TIP = {
 
 export const VARSAYILAN = {
   soc0: 100, rezerv: 15, saat: '08:00', T: 20, ruzgar: 0, yuk: 150, rakim: 1000, lastik: 1, yagis: false,
+  nem: 50, basincPa: null, ruzgarHizi: null, ruzgarYonu: 0,
   kap: 60, cda: 0.743, crr: 0.009, bos: 2000, verim: 0.90, sabitdk: 4,
 };
 
-const G = 9.81;
+const G = SABIT.g;
 
-export function havaYogunlugu(T, rakim) {
-  return 1.225 * 288.15 / (T + 273.15) * Math.exp(-rakim / 8500);
+// Bölümün hava yoğunluğu: ölçülen basınç ve nem varsa onlar, yoksa rakımdan tahmin.
+function yogunluk(k) {
+  const p = k.basincPa || basincTahmini(k.rakim, k.T);
+  return ro(k.T, p, k.nem ?? 50);
 }
 
 // Düz yolda Wh/km. hiz km/h; k koşullar ve araç parametreleri.
-export function whKm(tip, hiz, k) {
-  const t = TIP[tip], h = Math.max(5, hiz), v = h / 3.6;
-  const va = Math.max(0, v + k.ruzgar / 3.6);
-  const Fa = 0.5 * havaYogunlugu(k.T, k.rakim) * k.cda * va * va;
+// k.ruzgarHizi (m/s, 10 m) + k.ruzgarYonu + b.yolYonu varsa rüzgâr vektörel çözülür;
+// yoksa eski tek sayılı k.ruzgar (km/h, karşıdan +) kullanılır.
+export function whKm(tip, hiz, k, yolYonu = null) {
+  const t = TIP[tip], h = Math.max(5, hiz);
+  const vekt = k.ruzgarHizi != null && yolYonu != null
+    ? ruzgarBilesenleri(k.ruzgarHizi, k.ruzgarYonu ?? 0, yolYonu)
+    : { karsi: (k.ruzgar || 0) / 3.6, yan: 0 };
+  const a = akisDirenci(h, vekt.karsi, vekt.yan, k.cda);
+  const Fa = yogunluk(k) * a.kuvvet;
   const crr = k.crr * k.lastik * (1 + 0.003 * Math.max(0, 20 - k.T)) * (k.yagis ? 1.15 : 1);
   const Fr = crr * (k.bos + k.yuk) * G;
-  const yardimci = 0.5 + 0.14 * Math.max(0, 17 - k.T) + 0.07 * Math.max(0, k.T - 24); // kW
-  return (Fa + Fr) / 3.6 / k.verim * t.f + yardimci * 1000 / (h * t.akis);
+  return (Fa + Fr) / 3.6 / k.verim * t.f + yardimciKw(k.T) * 1000 / (h * t.akis);
 }
 
 // Rota motoru bölüm için akisOrani (Valhalla ölçülü) ve tırmanış/iniş verdiyse onlar kullanılır;
 // elle girilen bölümlerde yol tipinin varsayılanı ve net rakım farkı geçerlidir.
-export function bolumHesap(b, hiz, k) {
+// soc: bölüm başındaki şarj; inişte bataryanın rejenerasyonu kabul sınırını belirler.
+export function bolumHesap(b, hiz, k, soc = 50) {
   const m = k.bos + k.yuk;
-  const yerceken = b.cikis != null && b.inis != null
-    ? (m * G * b.cikis / 3600 / 1000) / k.verim - (m * G * b.inis / 3600 / 1000) * 0.75
-    : (b.dh >= 0 ? (m * G * b.dh / 3600 / 1000) / k.verim : (m * G * b.dh / 3600 / 1000) * 0.75);
-  const kwh = whKm(b.tip, hiz, k) * b.km / 1000 + yerceken + (b.gecisKayipKwh || 0);
+  const cikis = b.cikis != null ? b.cikis : Math.max(0, b.dh || 0);
+  const inis = b.inis != null ? b.inis : Math.max(0, -(b.dh || 0));
+  const tirmanis = m * G * cikis / 3.6e6 / k.verim;                      // kWh, harcanan
+  const geri = inisGeriKazanim(inis, m, b.km, hiz, soc, k.T);            // kWh, kazanılan
+  const kwh = whKm(b.tip, hiz, k, b.yolYonu) * b.km / 1000 + tirmanis - geri.kwh + (b.gecisKayipKwh || 0);
   const akis = b.akisOrani || TIP[b.tip].akis;
-  return { wh: b.km > 0 ? kwh / b.km * 1000 : 0, kwh, dk: b.km / (Math.max(5, hiz) * akis) * 60 };
+  return {
+    wh: b.km > 0 ? kwh / b.km * 1000 : 0, kwh, dk: b.km / (Math.max(5, hiz) * akis) * 60,
+    tirmanisKwh: +tirmanis.toFixed(2), geriKazanimKwh: +geri.kwh.toFixed(2),
+    kisilanKwh: +geri.kisilanKwh.toFixed(2),
+  };
 }
 
 // Referans eğri: 63 kWh E-GMP, 800 V istasyon; diğer bataryalar sarjOlcek ile ölçeklenir (bkz. arac.js).
@@ -69,7 +84,7 @@ export function hesapla(bolumler, k, hizFn) {
   let soc = k.soc0, km = 0, surus = 0, durakDk = 0, kwh = 0, maliyet = 0;
   const satir = [];
   for (const b of bolumler) {
-    const h = bolumHesap(b, hizFn ? hizFn(b) : b.hiz, k);
+    const h = bolumHesap(b, hizFn ? hizFn(b) : b.hiz, k, soc);
     const bas = soc;
     soc -= h.kwh / k.kap * 100; km += b.km; surus += h.dk; kwh += h.kwh;
     const r = { ...h, bas, varis: soc, km, durak: null };
