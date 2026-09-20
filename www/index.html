@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Yol Planı</title>
+<style>
+  body{margin:0;background:#10181D;color:#E6ECEA;font:16px/1.5 system-ui,sans-serif;padding:calc(env(safe-area-inset-top,0px) + 24px) 20px 24px}
+  h1{font-size:28px;margin:0 0 4px} p{color:#93A3A8;margin:0 0 20px}
+  dl{display:grid;grid-template-columns:1fr auto;gap:10px 16px;margin:0;font-variant-numeric:tabular-nums}
+  dt{color:#93A3A8} dd{margin:0;font-weight:600;text-align:right}
+  .hata{color:#F0435C}
+</style>
+</head>
+<body>
+<h1>Yol Planı</h1>
+<p>İskelet sürüm. Bu ekran, hesap çekirdeğinin uygulama içinde çalıştığını doğrular.</p>
+<dl id="sonuc"></dl>
+<script type="module">
+import { hesapla, whKm, VARSAYILAN } from './core/model.js';
+const rota = [
+  { tip: 'otoyol', km: 274, dh: 300, hiz: 120 },
+  { tip: 'otoyol', km: 326, dh: -700, hiz: 115 },
+  { tip: 'bolunmus', km: 85, dh: 0, hiz: 100 },
+];
+const el = document.getElementById('sonuc');
+try {
+  const r = hesapla(rota, VARSAYILAN);
+  const satir = (a, b) => `<dt>${a}</dt><dd>${b}</dd>`;
+  el.innerHTML =
+    satir('Örnek rota', r.km + ' km') +
+    satir('Enerji', r.kwh.toFixed(1) + ' kWh') +
+    satir('Ortalama', (r.kwh / r.km * 1000).toFixed(0) + ' Wh/km') +
+    satir('110 km/h, 20 °C', whKm('otoyol', 110, VARSAYILAN).toFixed(0) + ' Wh/km') +
+    satir('Sürüş', Math.round(r.surus) + ' dk');
+} catch (e) {
+  el.innerHTML = `<dt class="hata">Çekirdek yüklenemedi</dt><dd class="hata">${e.message}</dd>`;
+}
+</script>
+</body>
+</html>
