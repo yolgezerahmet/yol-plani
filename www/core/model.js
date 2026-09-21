@@ -1,6 +1,7 @@
 // Tüketim, süre ve şarj modeli. Saf fonksiyonlar: arayüzden ve OBD katmanından bağımsız test edilir.
 // Fiziksel alt katman fizik.js'te; buradaki işlevler onu bölüm ölçeğine uygular.
 // Kalibrasyon hedefleri (EV Database, IONIQ 5 63 kWh RWD): 110 km/h 20 °C ≈ 190 Wh/km, −10 °C ≈ 245 Wh/km.
+import { sicaklikKatsayisi, direncIsisi, ilerlet, TERMAL } from './termal.js';
 import { SABIT, havaYogunlugu as ro, basincTahmini, akisDirenci, ruzgarBilesenleri, yardimciKw, inisGeriKazanim } from './fizik.js';
 
 export const TIP = {
@@ -80,6 +81,27 @@ export function sarjDk(s0, s1, istasyonKw, kap, olcek = 1) {
     saat += kap * (son - bas) / 100 / Math.min(sarjGucu(s + 0.5, olcek), istasyonKw * 0.93);
   }
   return saat * 60;
+}
+
+// Sıcaklığa duyarlı şarj benzetimi. Her %0,5 SoC adımında güç = min(eğri × ölçek × sıcaklık katsayısı,
+// istasyon × 0,93); adım süresince I²R ısısı hücreyi ısıtır, ısınan hücre bir sonraki adımda daha
+// hızlı alır. Soğuk başlayan şarjın "önce yavaş, sonra hızlanan" biçimi buradan çıkar.
+// o: { olcek, T (hücre °C), ortamT, termal, tablo }
+export function sarjSimule(s0, s1, istasyonKw, kap, o = {}) {
+  const { olcek = 1, ortamT = 20, termal = TERMAL, tablo } = o;
+  let T = o.T ?? 25, dk = 0, enerji = 0;
+  const adim = 0.5;
+  for (let s = s0; s < s1 - 1e-9; s += adim) {
+    const ds = Math.min(adim, s1 - s);
+    const kw = Math.max(3, Math.min(sarjGucu(s + ds / 2, olcek) * sicaklikKatsayisi(T, tablo), istasyonKw * 0.93));
+    const kwh = kap * ds / 100, sure = kwh / kw * 60;
+    // Soğuk hücrede BMS şarj sırasında ısıtıcıyı şebekeden çalıştırır.
+    const isitici = T < termal.onIsitmaHedef ? termal.isiticiKw : 0;
+    T = ilerlet(T, ortamT, direncIsisi(kw, termal) + isitici, sure, termal);
+    dk += sure; enerji += kwh;
+  }
+  const sicakDk = sarjDk(s0, s1, istasyonKw, kap, olcek);
+  return { dk, T: +T.toFixed(1), ortKw: dk > 0 ? +(enerji / (dk / 60)).toFixed(1) : 0, sicaklikKaybiDk: +(dk - sicakDk).toFixed(1) };
 }
 
 // Planı baştan sona yürütür. hizFn verilirse duraklar yok sayılır (senaryo karşılaştırması).
