@@ -2,5 +2,6 @@
   "appId": "app.yolplani.ev",
   "appName": "Yol Planı",
   "webDir": "www",
-  "android": { "allowMixedContent": false }
+  "android": { "allowMixedContent": false },
+  "plugins": { "CapacitorHttp": { "enabled": true } }
 }
