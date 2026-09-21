@@ -1,6 +1,6 @@
 name: Veri güncelle
 
-# EPDK şarj istasyonu listesini (resmî koordinatlarıyla) haftada bir yeniler.
+# EPDK şarj istasyonu listesini (resmî koordinatlarıyla) ve OSM hız denetimi noktalarını haftada bir yeniler.
 # Parametresiz sorgu saatte bir yapılabilir; haftalık çalışma bu sınırın çok altında.
 on:
   schedule:
@@ -22,17 +22,22 @@ jobs:
           node-version: 22
       - name: EPDK istasyonlarını indir
         run: node scripts/epdk-guncelle.mjs www/data/epdk.json
+      - name: OSM hız denetimi noktalarını indir
+        continue-on-error: true   # Overpass yoğun olabilir; istasyon güncellemesini engellemesin
+        run: node scripts/denetim-guncelle.mjs www/data/denetim.json
       - name: Değiştiyse kaydet ve APK'yı yeniden derle
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if git diff --quiet -- www/data/epdk.json && git ls-files --error-unmatch www/data/epdk.json >/dev/null 2>&1; then
+          git add -N www/data/denetim.json 2>/dev/null || true
+          if git diff --quiet -- www/data/epdk.json www/data/denetim.json && git ls-files --error-unmatch www/data/epdk.json >/dev/null 2>&1; then
             echo "Değişiklik yok"; exit 0
           fi
           git config user.name "yol-plani-veri"
           git config user.email "actions@users.noreply.github.com"
           git add www/data/epdk.json
-          git commit -m "EPDK istasyon listesi: $(date -u +%F)"
+          [ -f www/data/denetim.json ] && git add www/data/denetim.json
+          git commit -m "Veri güncellemesi: $(date -u +%F)"
           git push
           # GITHUB_TOKEN ile yapılan push başka iş akışını tetiklemez; derlemeyi elle başlat.
           gh workflow run build.yml --ref main
