@@ -80,6 +80,22 @@ label.satir { display: flex; align-items: center; justify-content: space-between
 label.satir input { width: 7.5em; text-align: right; }
 dialog input[type=text], dialog input[inputmode] { font: 500 16px var(--sayi); padding: 8px 10px; border: 1px solid var(--cizgi); border-radius: 8px; background: var(--kagit); color: var(--murekkep); }
 .sonuc-kutu { background: var(--kagit); border-radius: 10px; padding: 12px; margin-top: 12px; line-height: 1.45; }
+#canli { position: fixed; inset: 0; z-index: 20; overflow: auto; background: var(--murekkep); color: var(--kagit); padding: 28px 20px calc(20px + env(safe-area-inset-bottom)); }
+#canli[hidden] { display: none; }
+body.canli-acik { overflow: hidden; }
+.canli-etiket { font-size: 14px; letter-spacing: .08em; text-transform: uppercase; opacity: .6; margin: 0; }
+#canliSira { font-size: 26px; line-height: 1.15; margin: 4px 0 10px; color: inherit; }
+#canliKalan { font: 700 44px/1.05 var(--sayi); margin: 0 0 6px; }
+#canliVaris { font: 600 24px var(--sayi); margin: 0 0 14px; }
+#canliKarar { font-size: 19px; line-height: 1.35; padding: 12px 14px; border-radius: 12px; margin: 0 0 12px; background: rgb(255 255 255 / .08); }
+#canliKarar[data-durum=iyi] { border-left: 6px solid #3fae7a; }
+#canliKarar[data-durum=dar] { border-left: 6px solid #e0a325; }
+#canliKarar[data-durum=kotu] { border-left: 6px solid #e0553d; background: rgb(224 85 61 / .18); }
+#canliSoc { all: unset; display: block; font-size: 16px; opacity: .85; padding: 8px 0; min-height: 44px; cursor: pointer; }
+#canli .kucuk { color: inherit; opacity: .7; }
+.canli-dugme { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; }
+.canli-dugme .planla { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; text-decoration: none; background: var(--batarya); color: #fff; min-height: 60px; }
+.canli-dugme .ikincil { min-height: 52px; color: var(--kagit); border-color: rgb(255 255 255 / .3); background: transparent; }
 .yola .planla { background: var(--batarya); color: #fff; }
 input[type=range] { width: 100%; accent-color: var(--batarya); margin: 6px 0 0; }
 .planla { width: 100%; font: 600 19px var(--sayi); color: var(--kagit); background: var(--murekkep);
@@ -197,6 +213,7 @@ dialog output { float: right; font: 600 18px var(--sayi); color: var(--murekkep)
       <a class="ikincil" id="wazeIlk" target="_blank" rel="noopener" aria-label="İlk durağa Waze ile git">Waze<br>1. durak</a>
     </div>
     <p class="kucuk" id="yolaCikNot"></p>
+    <button class="ikincil" id="canliBaslat" type="button" style="width:100%;min-height:48px;margin-top:8px">Yolda modunu başlat: canlı takip ve sesli uyarı</button>
     <div id="uyarilar"></div>
     <h2 id="durakBaslik">Şarj durakları</h2>
     <ol class="duraklar" id="duraklar"></ol>
@@ -204,6 +221,23 @@ dialog output { float: right; font: 600 18px var(--sayi); color: var(--murekkep)
     <p class="kaynak" id="kaynak"></p>
   </div>
 </main>
+
+<section id="canli" hidden aria-label="Yolda" aria-live="polite">
+  <p class="canli-etiket">Sıradaki</p>
+  <h2 id="canliSira"></h2>
+  <p id="canliKalan"></p>
+  <p id="canliVaris"></p>
+  <p id="canliKarar" data-durum="iyi"></p>
+  <button id="canliSoc" type="button"></button>
+  <p class="kucuk" id="canliUyari"></p>
+  <div class="canli-dugme">
+    <a class="planla" id="canliGit" target="_blank" rel="noopener"></a>
+    <button class="ikincil" id="canliYeniden" type="button">Yeniden planla</button>
+    <button class="ikincil" id="canliBuradan" type="button" hidden>Buradan yeni rota</button>
+    <button class="ikincil" id="canliSes" type="button">Ses açık</button>
+    <button class="ikincil" id="canliBitir" type="button">Bitir</button>
+  </div>
+</section>
 
 <dialog id="aracDialog">
   <form method="dialog">

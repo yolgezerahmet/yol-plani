@@ -22,6 +22,7 @@ import { yolculukMaliyeti, evSarjiEtkisi, asimAyi, OPERATORLER, FIYAT_TARIHI, ME
 import { enerjiAyristir, ayristirmaCumlesi } from './core/ayristir.js';
 import { v2lSure, CIHAZLAR, V2L_SINIR_KW } from './core/v2l.js';
 import { googleRota, wazeHedef } from './core/nav.js';
+import { canliBaslat } from './canli-ekran.js';
 
 const $ = id => document.getElementById(id);
 const sayi = (x, b = 0) => Number(x).toLocaleString('tr-TR', { maximumFractionDigits: b, minimumFractionDigits: b });
@@ -288,6 +289,19 @@ function ciz() {
   const ilk = p.duraklar[0]?.istasyon;
   $('wazeIlk').hidden = !ilk;
   if (ilk) $('wazeIlk').href = wazeHedef({ lat: ilk.enlem, lon: ilk.boylam });
+
+  // Yolda modu: seçili rota ve planla canlı takip. Yeniden planlanan duraklar ekrana da işlenir.
+  $('canliBaslat').onclick = () => {
+    const hizKat = +$('hiz').value / 100;
+    const sureFn = b => b.km / Math.max(5, b.hiz * hizKat * (b.akisOrani || 0.9)) * 60 + (b.olayDk || 0);
+    canliBaslat({
+      sonuc: s, varisSoc: +$('varis').value, hizKat, onIsitma: $('onIsitma').checked, sicaklikTablosu: kalibrasyon()?.sicaklikTablosu || undefined,
+      varisUrl: googleRota(durum.nereden, durum.nereye, []).url,
+      havaTazele: async kalan => havaUygula(kalan, await havaGetir(kalan), Date.now(), sureFn),
+      yeniPlan: y => { s.plan = { ...y, termal: y.termal ?? s.plan.termal }; },
+      buradanPlanla: k => { durum.nereden = { ad: 'Bulunduğum yer', lat: k.lat, lon: k.lon }; $('nereden').value = durum.nereden.ad; $('planla').click(); },
+    });
+  };
 
   $('durakBaslik').hidden = !n;
   const olc = olcumler();

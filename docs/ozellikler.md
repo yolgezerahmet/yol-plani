@@ -126,3 +126,15 @@ bir şarj durağı farkı. Süreler birbirine yakın. Bu karşılaştırmayı sa
 - **V2L:** seçilen cihazlarla kesintide kaç saat/gün; 3,6 kW anlık sınır uyarısı.
 - **Ölçülmüş şarj gücü (yerel):** OBD kaydındaki DC şarj, GPS ile istasyona eşlenir; durak kartında
   "senin ölçümün". Paylaşım henüz yok; tasarımı ayrı karar.
+
+## Yolda modu: canlı takip (Eylül 2026)
+
+Plan ekranındaki "Yolda modunu başlat" ile açılır. Çekirdek `core/canli.js` (saf, testli), arayüz `canli-ekran.js`.
+- **Konum:** GPS rotaya izdüşürülür; rota dışı (> 1,5 km) ve geriye sıçrama ayrılır. 90 sn rota dışında kalınırsa "Buradan yeni rota".
+- **Batarya:** OBD bağlıysa 5 sn'de bir ölçüm; değilse plandan tahmin, göstergedeki değer elle girilerek düzeltilir.
+- **Canlı tüketim katsayısı:** OBD enerji sayaçlarından ölçülen / model; 15 km'den sonra devreye girer, 60 km'de tam güven, 0,8–1,45 arası.
+- **Karar:** plan tutuyor · pay dar (hızı düşür) · yetmiyor (otomatik yeniden planlama) · plandan önde · rota dışı. Sesli ve titreşimli; aynı uyarı yinelenmez.
+- **Ön ısıtma hatırlatması:** planın söylediği km'de, hücre hâlâ soğuksa.
+- **Durakta:** OBD DC şarjı görünce hedefe kalan dakika, anlık kW, istasyon beklenenden yavaşsa uyarı, hedefe varınca "yola çıkabilirsin" (işgaliye).
+- **Tazeleme:** 30 dakikada bir kalan yolun havası yeniden alınır ve plan güncellenir.
+- Ekran açık tutulur (Wake Lock). Bilinen sınır: Android WebView'de tarayıcı ses sentezi her cihazda yok; yoksa titreşim + ekran kalır. Ekran kapalıyken çalışma için yerel ön plan servisi gerekir (henüz yok).

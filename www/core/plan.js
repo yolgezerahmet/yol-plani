@@ -43,7 +43,7 @@ export function enerjiEgrisi(bolumler, k, { hizKat = 1, soc = 60 } = {}) {
 
 // Rotanın x km'sine kadar birikimli enerji (bölüm içinde doğrusal).
 export function kwhKmde(e, x) {
-  if (x <= 0) return 0;
+  if (x <= e.km[0]) return 0;                 // kaydırılmış (yeniden planlanmış) eğride başlangıç 0 değildir
   if (x >= e.toplamKm) return e.toplamKwh;
   let i = 1;
   while (e.km[i] < x) i++;

@@ -16,6 +16,11 @@ const EN_FAZLA = 8000;   // ~2 MB; 5 sn aralıkla ~11 saat
 
 const obd = { tampon: [], oturum: null, baglanti: null, zamanlayici: null, izleme: null, km: 0, sonKonum: null, gunluk: [], yolculuk: null };
 export const kalibrasyon = () => depo.al('kalibrasyon', null);
+// Canlı mod her OBD örneğini dinler.
+const dinleyiciler = new Set();
+export const obdDinle = cb => { dinleyiciler.add(cb); return () => dinleyiciler.delete(cb); };
+export const obdBagli = () => !!obd.oturum;
+export function obdKaydiAc(plan) { if (obd.oturum && !obd.zamanlayici) kaydiBaslat(plan); }
 // İstasyon no → en son ölçümler (yalnızca bu telefonda).
 export const olcumler = () => depo.al('olcumler', []);
 
@@ -116,6 +121,7 @@ function kaydiBaslat(plan) {
       // Depoya dakikada bir yazılır: 2 MB'lık listeyi her 5 saniyede yeniden yazmak pili yorar.
       if (obd.tampon.length >= 12) tamponuYaz();
       if (obd.yolculuk) { obd.yolculuk.bas ??= o; obd.yolculuk.son = o; }
+      dinleyiciler.forEach(f => { try { f(o); } catch {} });
       $('obdKayitBilgi').textContent = `Kayıt sürüyor: bu yolculuk ${sayi(obd.km, 1)} km${d.dcSarj ? ', DC şarj kaydediliyor' : ''}.`;
     } catch (e) { gunlukYaz('kayıt', e.message); }
   };
