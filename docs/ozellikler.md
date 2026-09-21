@@ -200,3 +200,13 @@ paylaşım menüsünden OsmAnd'e verilir: şarj durakları ara nokta (adında va
 kWh, ön ısıtma km'si, yedek), ön ısıtma başlangıç noktası ayrı işaret, `<rte>` ara noktalı rota (OsmAnd yeniden
 hesaplar), `<trk>` tam iz ("izle" için). Tarayıcıda indirme olarak çalışır. Sıradaki: OsmAnd AIDL ile canlı
 widget ("sıradaki durağa %24") ve istasyon katmanı.
+
+## OsmAnd EV eklentisi (.osf) (Eylül 2026)
+Hesap → OsmAnd eklentisi. `core/osmand.js` + `core/zip.js` (bağımlılıksız zip yazıcı). OsmAnd'in özel eklenti biçimi
+(items.json + dosyalar); kod değil veri paketi olduğu için Play, ücretsiz ve F-Droid sürümlerinin hepsinde kurulur.
+- PLUGIN öğesi: Menü → Eklentiler'de "Yol Planı: elektrikli araç".
+- İki FAVOURITES grubu: "EV şarj 150 kW+" (yeşil), "EV şarj 50–149 kW" (turuncu); simge `amenity_charging_station`.
+  Ad: "ZES · 180 kW × 2"; açıklama: tesis, ilçe/il, işletmeci, EPDK lisans no. 7.595 istasyon, ~3,2 MB.
+- Biçim OsmAnd kaynağından doğrulandı (SettingsItemType, SettingsItem.readFromJson: "file" alanı zip girişinin adı).
+- Paylaşım menüsü OsmAnd'i göstermezse: dosyayı kaydet → OsmAnd Menü → Ayarlar → Dosyadan içe aktar.
+Doğrulanmadı: OsmAnd'in içe aktarmada favori rengini ve simgesini GPX uzantılarından alıp almadığı.
