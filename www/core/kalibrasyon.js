@@ -17,12 +17,15 @@ export function sarjOturumlari(ornekler, { boslukMs = 5 * 60000 } = {}) {
     if (!cur || (onceki && o.t - onceki.t > boslukMs)) { cur = []; oturum.push(cur); }
     cur.push(o); onceki = o;
   }
+  // 100 kW üstünde verilen enerji (kWh): örnekler arası süre × güç. Batarya karnesi için.
+  const ust100 = s => { let e = 0; for (let i = 1; i < s.length; i++) { const kw = -s[i].gucKw, saat = Math.min(60e3, s[i].t - s[i - 1].t) / 3.6e6; if (kw > 100) e += kw * saat; } return +e.toFixed(1); };
   return oturum.filter(s => s.length >= 3).map(s => ({
     bas: s[0].t, son: s[s.length - 1].t, dk: +((s[s.length - 1].t - s[0].t) / 60000).toFixed(1),
     soc0: s[0].soc, soc1: s[s.length - 1].soc,
     kwh: s[s.length - 1].cecKwh != null && s[0].cecKwh != null ? +(s[s.length - 1].cecKwh - s[0].cecKwh).toFixed(1) : null,
     T0: s[0].bataryaMinT, T1: s[s.length - 1].bataryaMinT,
     tepeKw: Math.max(...s.map(x => -x.gucKw)),
+    kwhUst100: ust100(s), maxT: Math.max(...s.map(x => x.bataryaMaxT ?? -99)),
     noktalar: s.map(x => ({ soc: x.soc, kw: -x.gucKw, T: x.bataryaMinT, enlem: x.enlem, boylam: x.boylam })),
   }));
 }

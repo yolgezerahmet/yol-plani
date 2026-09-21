@@ -45,8 +45,11 @@ sayısından ve kendi ölçümlerimizden gelir. Türkiye için p bilinmiyor [T];
   gelirse (zamanın > %80'i) etkili.
 
 **Çıkarım:** yolculukta "%80'i geçme" diye ısrar etmek yersiz; asıl etken yıl içindeki yüksek güçlü DC payı.
-**Sıradaki:** "batarya karnesi": OBD kayıtlarından DC payı, 100 kW üstü payı, uç düzeylerde geçen süre; SoH'nin
-(220105 çözücüsü var) km'ye göre eğilimi ve Geotab ortalamasıyla karşılaştırma. İkinci el raporunun da temeli.
+**Durum: yapıldı** (`core/karne.js`). Sağlık günlüğü (günde bir: BMS SoH, km, şarj sayacı, ölçülen kapasite) ve şarj
+günlüğü (oturum başına kWh, 100 kW üstü kWh, sıcaklıklar). Eğilim en az 4 okuma ve 90 gün ister; hızlı şarj payı BMS
+sayacına göre "en az" olarak verilir. Uç SoC'de geçen süre ölçülmüyor: kayıt yalnız sürüşte açık olduğundan yanlı olurdu.
+Soğuk hücrede hızlı şarjın yıpratıcı etkisi için bu taramada kaynak doğrulanmadı; karne yalnız süre etkisini söyler.
+**Sıradaki:** karneden ikinci el batarya raporu (PDF, tarih ve şasi son haneleriyle).
 
 ## 5. Henüz taranmayan alanlar
 Eko-sürüş ve hız profili en iyilemesi, kabin ön koşullandırmanın enerji etkisi, sürücü yorgunluğu ve mola aralıkları,

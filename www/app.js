@@ -444,7 +444,8 @@ function kullanimOku() {
 $('garaj').value = depo.al('garaj', '');
 $('onIsitma').checked = depo.al('onIsitma', true);
 obdPaneli({ planGetir: () => durum.sonuclar[durum.secili]?.plan, olcekGetir: () => ARACLAR[durum.arac].sarjOlcek,
-            istasyonlarGetir: async () => (await paket()).istasyonlar });
+            istasyonlarGetir: async () => (await paket()).istasyonlar,
+            katalogKwhGetir: () => ARACLAR[durum.arac].kap });
 
 // ---- Hesap: şarj fiyatları, ev elektriği, V2L ---------------------------------
 const hesapKaydet = () => depo.koy('hesap', durum.hesap);

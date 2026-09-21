@@ -96,6 +96,7 @@ body.canli-acik { overflow: hidden; }
 .canli-dugme { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; }
 .canli-dugme .planla { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; text-decoration: none; background: var(--batarya); color: #fff; min-height: 60px; }
 .canli-dugme .ikincil { min-height: 52px; color: var(--kagit); border-color: rgb(255 255 255 / .3); background: transparent; }
+.karne { padding-left: 18px; margin: 6px 0; } .karne li { margin: 6px 0; line-height: 1.4; }
 .yola .planla { background: var(--batarya); color: #fff; }
 input[type=range] { width: 100%; accent-color: var(--batarya); margin: 6px 0 0; }
 .planla { width: 100%; font: 600 19px var(--sayi); color: var(--kagit); background: var(--murekkep);
@@ -273,6 +274,10 @@ dialog output { float: right; font: 600 18px var(--sayi); color: var(--murekkep)
     <button class="ikincil" id="obdGuncelle" type="button">Kayıtlardan güncelle</button>
     <button class="ikincil" id="obdSil" type="button">Kayıtları sil</button>
   </div>
+  <h2>Batarya karnesi</h2>
+  <ul class="kucuk karne" id="obdKarne"></ul>
+  <div class="dugmeler"><button class="ikincil" id="obdKarneKopya" type="button">Karneyi kopyala</button></div>
+  <p class="kucuk">Karne kayıtları "Kayıtları sil" ile silinmez; uzun dönem eğilimi için saklanır.</p>
   <form method="dialog"><button class="planla" style="margin-top:14px">Kapat</button></form>
 </dialog>
 

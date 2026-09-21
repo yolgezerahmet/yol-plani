@@ -7,6 +7,7 @@ import { mesafeKm } from './core/istasyon.js';
 import { olcumOzeti } from './core/olcum.js';
 import { isabet } from './core/isabet.js';
 import { bosDurum, ogrenmeOzeti } from './core/ogrenme.js';
+import { sarjGunlugu, saglikGunlugu, karneMetni } from './core/karne.js';
 import { servisAl, servisBirak, periyodik, konumDinle } from './servis.js';
 
 const $ = id => document.getElementById(id);
@@ -71,7 +72,7 @@ async function oku() {
 
 async function tekOku() {
   try {
-    await oku();
+    const ilk = await oku();
     // Diğer modüller: yanıt verenler ham olarak telefonda saklanır; çözücü ilk gerçek çıktıyla yazılacak.
     durum('BMS okundu; diğer modüller taranıyor…');
     const k = await kesifTara(obd.oturum);
@@ -89,6 +90,10 @@ async function tekOku() {
     if (ek.length) $('obdDegerler').insertAdjacentHTML('beforeend',
       ek.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('') + '<dt>Not</dt><dd>Bu ek değerler açık kaynak tablolarıyla çözüldü; gösterge panelindeki değerlerle karşılaştır.</dd>');
     depo.koy('obd:arac', { t: Date.now(), ...v });
+    // Batarya karnesi: günde bir sağlık kaydı (SoH, km, BMS şarj sayacı, ölçülen kapasite).
+    depo.koy('karne:saglik', saglikGunlugu(depo.al('karne:saglik', []), { t: Date.now(), soh: v.sohYuzde ?? null, odoKm: v.odoKm ?? null,
+      cecKwh: ilk?.d?.cecKwh ?? null, kapasiteKwh: kalibrasyon()?.kapasiteKwh ?? null }));
+    karneyiCiz();
     durum(`${var_.length}/${k.length} modül yanıt verdi: ${var_.map(x => x.ne.split(':')[0]).join(', ') || 'yok'}. `
       + '"Ham çıktıyı kopyala" ile paylaşırsan çözücüleri yazarım.');
   } catch (e) { durum('Okuma hatası: ' + e.message, true); }
@@ -157,6 +162,7 @@ export function kalibrasyonGuncelle(olcek = 1, istasyonlar = []) {
   tamponuYaz();
   const ornekler = depo.al('obd:ornekler', []);
   const oturumlar = sarjOturumlari(ornekler);
+  depo.koy('karne:sarj', sarjGunlugu(depo.al('karne:sarj', []), oturumlar));
   const st = sicaklikTablosu(oturumlar, { olcek });
   const kapasiteler = oturumlar.filter(o => o.kwh != null).map(o => kapasiteTahmini(
     { soc: o.soc0, cecKwh: 0, cedKwh: 0 }, { soc: o.soc1, cecKwh: o.kwh, cedKwh: 0 })).filter(Boolean);
@@ -178,6 +184,13 @@ export function kalibrasyonGuncelle(olcek = 1, istasyonlar = []) {
   return k;
 }
 
+let katalogKwh = null;
+function karneyiCiz() {
+  const satir = karneMetni({ sarj: depo.al('karne:sarj', []), saglik: depo.al('karne:saglik', []), katalogKwh });
+  $('obdKarne').innerHTML = satir.map(s => `<li>${s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))}</li>`).join('');
+  return satir;
+}
+
 export function kalibrasyonMetni(k = kalibrasyon()) {
   if (!k) return 'Henüz kalibrasyon yok. Bir hızlı şarj ve bir planlı yolculuğu kaydedince model kendi aracına uyar.';
   const p = [];
@@ -193,8 +206,12 @@ export function kalibrasyonMetni(k = kalibrasyon()) {
   return p.join('; ') + `. Güncelleme: ${k.tarih}.`;
 }
 
-export function obdPaneli({ planGetir, olcekGetir, istasyonlarGetir = async () => [] }) {
-  $('obdDugme').onclick = () => { $('obdKalib').textContent = kalibrasyonMetni(); $('obdDialog').showModal(); };
+export function obdPaneli({ planGetir, olcekGetir, istasyonlarGetir = async () => [], katalogKwhGetir = () => null }) {
+  $('obdDugme').onclick = () => { katalogKwh = katalogKwhGetir(); $('obdKalib').textContent = kalibrasyonMetni(); karneyiCiz(); $('obdDialog').showModal(); };
+  $('obdKarneKopya').onclick = async () => {
+    const metin = 'Yol Planı batarya karnesi, ' + new Date().toLocaleDateString('tr-TR') + '\n' + karneyiCiz().map(s => '• ' + s).join('\n');
+    try { await navigator.clipboard.writeText(metin); durum('Karne panoya kopyalandı.'); } catch { durum('Kopyalanamadı.', true); }
+  };
   $('obdBaglan').onclick = baglan;
   $('obdOku').onclick = tekOku;
   $('obdKayit').onclick = () => (obd.zamanlayici ? kaydiDurdur() : kaydiBaslat(planGetir()));
@@ -206,6 +223,7 @@ export function obdPaneli({ planGetir, olcekGetir, istasyonlarGetir = async () =
     let ist = [];
     try { ist = await istasyonlarGetir(); } catch {}
     $('obdKalib').textContent = kalibrasyonMetni(kalibrasyonGuncelle(olcekGetir(), ist));
+    karneyiCiz();
   };
   $('obdSil').onclick = () => {
     if (!confirm('Telefondaki tüm OBD kayıtları ve kalibrasyon silinsin mi?')) return;

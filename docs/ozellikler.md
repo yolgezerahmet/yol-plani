@@ -184,3 +184,12 @@ Aykırı pencereler (4σ) atılır, çarpanlar 0,7–1,5 arasında tutulur. Sür
   o istasyonda düşük güç gösterdiyse p iki katına çıkar, normal gösterdiyse yarıya iner.
 - 200 rastgele rotada dayanıklılığın bedeli: ortalama 1,5 dk, ortanca 1 dk, %90'lık dilim 4 dk.
 - Durak kartı: "Çalışmazsa: X, 12 km ileride; oraya %9 ile varırsın." Tek soketli istasyon ayrıca belirtilir.
+
+## Batarya karnesi (Eylül 2026)
+OBD panelinde. `core/karne.js`; günlükler `karne:saglik` ve `karne:sarj` (yalnız telefonda, "Kayıtları sil" ile silinmez).
+- Her "Oku": BMS SoH, km, BMS şarj sayacı ve ölçülen kapasite günde bir kez kaydedilir.
+- Her "Kayıtlardan güncelle": yeni DC oturumları (kWh, tepe güç, 100 kW üstü kWh, başlangıç ve en yüksek hücre sıcaklığı) işlenir.
+- Eğilim: ≥ 4 okuma ve ≥ 90 gün olunca yıllık ve 10.000 km başına kayıp; ölçülen kapasite varsa o, yoksa BMS değeri.
+  Geotab filo verisiyle (ortalama %2,3/yıl; yavaş şarj %1,5; yoğun 100 kW+ DC %3,0) yan yana gösterilir.
+- Hızlı şarj payı: kaydedilen DC enerjisi / BMS sayacındaki toplam şarj; kaydedilmeyen oturum olabileceği için "en az".
+- "Karneyi kopyala" düz metin verir.
