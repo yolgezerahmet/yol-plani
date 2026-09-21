@@ -1,7 +1,8 @@
 // Yolda (canlı) mod: konum + ölçülen batarya → plana göre neredeyiz, sıradaki durağa yetiyor mu,
 // ne yapmalı. Saf fonksiyonlar; GPS, OBD ve ses arayüz katmanında.
 import { rotayaIzdusur } from './istasyon.js';
-import { kwhKmde, aralikKwh, durakPlanla } from './plan.js';
+import { aralikKwh } from './plan.js';
+import { durakOptimum } from './optimum.js';
 
 export const CANLI = {
   rotaDisiKm: 1.5,        // rotadan bu kadar uzaklaşınca "rota dışı"
@@ -152,7 +153,7 @@ export function yenidenPlanla({ bolumler, istasyonlar, k, km, soc, kat = 1, opt 
   const kb = hazirKalan || kalanBolumler(bolumler, km);
   const ki = istasyonlar.filter(s => s.rotaKm > km + 2).map(s => ({ ...s, rotaKm: +(s.rotaKm - km).toFixed(1) }));
   const kk = { ...k, soc0: soc, tuketimKat: (k.tuketimKat ?? 1) * kat };
-  const p = durakPlanla(kb, ki, kk, opt);
+  const p = durakOptimum(kb, ki, kk, opt);
   const kaydir = x => +(x + km).toFixed(1);
   return {
     ...p,

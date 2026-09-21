@@ -5,6 +5,7 @@ import { bleBaglan } from './core/ble.js';
 import { sarjOturumlari, sicaklikTablosu, kapasiteTahmini, tuketimKatsayisi } from './core/kalibrasyon.js';
 import { mesafeKm } from './core/istasyon.js';
 import { olcumOzeti } from './core/olcum.js';
+import { isabet } from './core/isabet.js';
 
 const $ = id => document.getElementById(id);
 const sayi = (x, b = 0) => x == null || Number.isNaN(x) ? '–' : Number(x).toLocaleString('tr-TR', { maximumFractionDigits: b, minimumFractionDigits: b });
@@ -176,6 +177,8 @@ export function kalibrasyonMetni(k = kalibrasyon()) {
   p.push(`${k.oturum} şarj oturumu, ${k.olculenDilim} sıcaklık dilimi ölçüldü`);
   if (k.kapasiteKwh) p.push(`kullanılabilir kapasite ≈ ${sayi(k.kapasiteKwh, 1)} kWh`);
   if (k.tuketimKat) p.push(`tüketim modelin %${sayi(k.tuketimKat * 100)}'i (${k.yolculuk} yolculuk)`);
+  const is = isabet(depo.al('obd:yolculuklar', []));
+  if (is) p.push(`tahmin isabeti: ${is.yolculuk} yolculuk, ${sayi(is.km)} km'de ortalama hata %${sayi(is.mape, 1)} (${is.sapma > 0 ? 'fazla' : 'az'} tahmin yönünde)`);
   const o = olcumler();
   if (o.length) p.push(`${o.length} şarj bir istasyonla eşlendi${o.some(x => x.dusuk) ? `, ${o.filter(x => x.dusuk).length} tanesi beklenenin belirgin altında` : ''}`);
   return p.join('; ') + `. Güncelleme: ${k.tarih}.`;

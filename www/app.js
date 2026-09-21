@@ -4,6 +4,8 @@ import { ARACLAR, VARSAYILAN_ARAC, aracUygula } from './core/arac.js';
 import { havaGetir, havaUygula, ornekNoktalari } from './core/hava.js';
 import { cokluHavaGetir, modelNoktasi, belirsizlik, MODEL_AD } from './core/hava-coklu.js';
 import { durakPlanla, enerjiEgrisi } from './core/plan.js';
+import { durakOptimum, hizOnerisi } from './core/optimum.js';
+import { sigmaOrani, bacakRiski } from './core/risk.js';
 import { bultenGetir, yerSozlugu, rotadakiKayitlar, kapaliGetir, rotadakiKapali } from './core/kgm.js';
 import { KULLANIM_VARSAYILAN, TAVAN, LASTIK, KLIMA, CEKILEN, BASINC, basincCrrKat, kullanimUygula, kabinGecisKwh, yolculukKapasiteKat } from './core/kullanim.js';
 import { rotadakiDenetim } from './core/denetim.js';
@@ -170,11 +172,17 @@ $('planla').onclick = async () => {
       const kr = { ...k, kap: +(k.kap * kapKat).toFixed(2) };
       bildir(`Rota ${i + 1}: yol üstündeki istasyonlar…`);
       const ist = { istasyonlar: rotaIstasyonlari(r.sekil, pk.istasyonlar) };
-      const plan = durakPlanla(bolumler, ist.istasyonlar, kr, {
+      const planOpt = {
         hizKat, varisSoc, onIsitma,
         bataryaT0: garaj === '' ? undefined : +garaj,
         sicaklikTablosu: kal?.sicaklikTablosu || undefined,
-      });
+      };
+      // En iyi plan (dinamik programlama); açgözlü yalnız kıyas için.
+      const plan = durakOptimum(bolumler, ist.istasyonlar, kr, { ...planOpt, saatTl: durum.hesap.saatTl || null, fiyat: durum.hesap.fiyat });
+      const acgozlu = durakPlanla(bolumler, ist.istasyonlar, kr, planOpt);
+      plan.kazancDk = acgozlu.sorun ? null : acgozlu.toplamDk - plan.toplamDk;
+      const hiz = hizOnerisi(bolumler, ist.istasyonlar, kr, { ...planOpt, saatTl: durum.hesap.saatTl || null, fiyat: durum.hesap.fiyat });
+      plan.hizOneri = hiz;
       const yolAdlari = [...new Set(r.bolumler.flatMap(b => b.adlar || []))];
       const yol = bulten ? { tarih: bulten.tarih, kayit: rotadakiKayitlar(bulten, r.sekil, sozlukOnbellek, { yolAdlari }) } : null;
       durum.sonuclar.push({ rota: r, bolumler, plan, ist, havaVar, hava, yol, kapali: kapali ? rotadakiKapali(kapali, r.sekil) : null, k: kr, kul, etken: { kabinKwh, kapKat },
@@ -217,6 +225,11 @@ function ciz() {
   s.maliyet = yolculukMaliyeti(p, { bolumler: s.bolumler, kullanici: durum.hesap.fiyat, evTl, baslangicKwh: Math.max(0, p.toplamKwh - alinan) });
   const m = s.maliyet;
   const cumle = ayristirmaCumlesi(enerjiAyristir(s.bolumler, s.k));
+  // Belirsizlik: tek sayı yerine "%90 olasılıkla en az".
+  const sig = sigmaOrani({ kalibreYolculuk: kalibrasyon()?.yolculuk || 0, havaSenaryoKwh: (s.hava?.senaryo || []).map(x => x.kwh), toplamKwh: p.toplamKwh });
+  s.risk = bacakRiski(p, s.k, sig.toplam);
+  const ek_ = s.risk.enKotu;
+  const riskMetni = ek_ ? ` %90 olasılıkla ${n ? 'her durağa ve varışa' : 'varışa'} en az <strong>%${sayi(Math.max(0, ek_.p10))}</strong> ile ulaşırsın (en belirsiz bacak: ${kacis(ek_.ad)}, ±${sayi(ek_.sigma, 1)} puan).` : '';
   const maliyetMetni = n
     ? ` Şarj maliyeti yaklaşık <strong>${sayi(m.sarjTl)} TL</strong>${m.evTutar != null ? `, evde doldurduğun kısımla birlikte ${sayi(m.toplamTl)} TL (km başı ${sayi(m.kmBasiTl, 2)} TL)` : ''}.`
     : (m.evTutar != null ? ` Enerji maliyeti yaklaşık ${sayi(m.evTutar)} TL (ev elektriği).` : '');
@@ -230,7 +243,7 @@ function ciz() {
   $('ozet').innerHTML = `<strong>${sure(p.toplamDk)}</strong> yolculuk, ${n ? `<strong>${n}</strong> şarj durağı (${sure(p.sarjDk)})` : 'şarj durağı yok'}, varışta <strong>%${sayi(p.varisSoc)}</strong>. `
     + `Ortalama ${sayi(p.ortWh)} Wh/km, toplam ${sayi(p.toplamKwh, 1)} kWh.`
     + (p.termal?.onIsitmaKazanciDk >= 3 ? ` Ön ısıtma şarj süresini ${p.termal.onIsitmaKazanciDk} dk kısaltıyor.` : '')
-    + havaMetni + maliyetMetni + (cumle ? ' ' + cumle : '');
+    + havaMetni + maliyetMetni + (cumle ? ' ' + cumle : '') + riskMetni;
 
   const u = [];
   if (p.sorun) u.push(`<p class="uyari">${kacis(p.sorun.mesaj)}. Menzili uzatmak için hızı düşürmeyi ya da çıkış bataryasını artırmayı deneyin.</p>`);
@@ -277,6 +290,11 @@ function ciz() {
       `<li><b>${kacis(x.ozet)}</b>, yaklaşık ${sayi(x.kmAralik[0])}${x.kmAralik[1] - x.kmAralik[0] > 10 ? '–' + sayi(x.kmAralik[1]) : ''}. km${x.guclu ? '' : ' (yer adından eşlendi)'}.
        <details><summary>Bülten metni</summary><p class="kucuk">${kacis(x.metin)}</p></details></li>`).join('')}</ul></div>`);
   } else if (s.yol) u.push(`<p class="bilgi">KGM yol durumu bülteninde (${s.yol.tarih ? s.yol.tarih.split('-').reverse().join('.') : 'güncel'}) bu rotayla eşleşen çalışma ya da kapanma yok.</p>`);
+  if (s.risk?.enKotu && s.risk.enKotu.p10 < 5) u.push(`<p class="uyari">${kacis(s.risk.enKotu.ad)} bacağında pay dar: kötü senaryoda %${sayi(Math.max(0, s.risk.enKotu.p10))} ile varılabilir. Varış hedefini ya da rezervi yükseltmek planı daha güvenli yapar.</p>`);
+  const ho = p.hizOneri;
+  if (ho?.kazancDk >= 3 && ho.en.hizKat !== +$('hiz').value / 100)
+    u.push(`<p class="bilgi">Hızı limitin %${Math.round(ho.en.hizKat * 100)}'ine ${ho.en.hizKat > +$('hiz').value / 100 ? 'çıkarırsan' : 'indirirsen'} toplam yolculuk ${ho.kazancDk} dk kısalır (${ho.en.durak} durak, varışta %${sayi(ho.en.varis)}).</p>`);
+  if (p.kazancDk >= 3) u.push(`<p class="bilgi">Durak seçimi ve şarj miktarları bütün olasılıklar karşılaştırılarak belirlendi; basit "her durakta %80'e doldur" yaklaşımına göre ${p.kazancDk} dk daha kısa.</p>`);
   if (m.ucretliKm >= 5) u.push(`<p class="bilgi">Rotanın ${sayi(m.ucretliKm)} km'si ücretli yol (otoyol, köprü ya da tünel); geçiş ücreti şarj maliyetine eklenmedi.</p>`);
   if (m.tahminVar) u.push(`<p class="bilgi">Bazı operatörlerin fiyatı bilinmiyor; tahmini değer kullanıldı. Hesap menüsünden kendi fiyatını girebilirsin.</p>`);
   $('uyarilar').innerHTML = u.join('');
@@ -469,6 +487,8 @@ $('v2lCihaz').onchange = e => {
   const s = new Set(durum.hesap.v2l.secili); e.target.checked ? s.add(c) : s.delete(c);
   durum.hesap.v2l.secili = [...s]; hesapKaydet(); v2lHesabi();
 };
+$('saatTl').value = durum.hesap.saatTl ?? '';
+$('saatTl').oninput = () => { durum.hesap.saatTl = sayiOku($('saatTl').value); hesapKaydet(); };
 $('hesapDugme').onclick = () => { fiyatListesi(); evHesabi(); v2lHesabi(); $('hesapDialog').showModal(); };
 $('hesapDialog').onclose = () => { if (durum.sonuclar.length) ciz(); };
 aracYaz();

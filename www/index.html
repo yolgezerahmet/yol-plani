@@ -274,6 +274,8 @@ dialog output { float: right; font: 600 18px var(--sayi); color: var(--murekkep)
 <dialog id="hesapDialog">
   <h2 style="margin-top:0">Hesap</h2>
   <details open><summary><b>Şarj fiyatları</b></summary>
+    <label class="satir">Zamanımın değeri, TL/saat (boşsa yalnız süre) <input id="saatTl" type="text" inputmode="numeric" placeholder="örn. 300"></label>
+    <p class="kucuk">Doluysa planlayıcı, pahalı ama hızlı istasyon ile ucuz ama yavaş istasyon arasında bu değere göre seçer. Yeniden planla.</p>
     <p class="kucuk" id="fiyatNot"></p>
     <div id="fiyatlar"></div>
   </details>

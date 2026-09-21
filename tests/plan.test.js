@@ -44,7 +44,7 @@ test('uzun yolculukta durak planlanır ve varış rezervin üstünde', () => {
     assert.ok(d.hedefSoc <= 90, 'şarj %90 üstüne çıkmaz');
     assert.ok(d.dk > 0);
   }
-  assert.equal(p.toplamDk, p.surusDk + p.sarjDk);
+  assert.ok(Math.abs(p.toplamDk - (p.surusDk + p.sarjDk + p.sapmaDk)) <= 1);
 });
 
 test('son durakta yalnızca gerektiği kadar şarj edilir', () => {

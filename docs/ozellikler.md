@@ -138,3 +138,18 @@ Plan ekranındaki "Yolda modunu başlat" ile açılır. Çekirdek `core/canli.js
 - **Durakta:** OBD DC şarjı görünce hedefe kalan dakika, anlık kW, istasyon beklenenden yavaşsa uyarı, hedefe varınca "yola çıkabilirsin" (işgaliye).
 - **Tazeleme:** 30 dakikada bir kalan yolun havası yeniden alınır ve plan güncellenir.
 - Ekran açık tutulur (Wake Lock). Bilinen sınır: Android WebView'de tarayıcı ses sentezi her cihazda yok; yoksa titreşim + ekran kalır. Ekran kapalıyken çalışma için yerel ön plan servisi gerekir (henüz yok).
+
+## En iyi durak planı, hız önerisi, belirsizlik (Eylül 2026)
+
+- **Dinamik programlama** (`core/optimum.js`): düğümler rota üstü istasyonlar (8 km'lik dilimde en güçlü 3),
+  durum ayrılış SoC'si (%1). Amaç: şarj + durak sabit süresi + sapma süresi (+ TL × zaman değeri).
+  Tek durakta %95'e kadar dolum serbest; %80 üstü yavaş ama bir durağı atlatıyorsa seçilir.
+  300 rastgele rotada açgözlü yönteme göre ortalama 16 dk, ortanca 11 dk, en çok 77 dk kısa; hiçbirinde uzun değil.
+  600 km rota ve 480 istasyonla tek plan ~14 ms.
+- **Toplam süreye sapma dahil:** istasyona gidiş-dönüş sürüşü artık toplam süreye ekleniyor.
+- **Hız önerisi:** limitin %90–110'u arasında toplam süre (sürüş + şarj) karşılaştırılır, 3 dk'dan fazla kazanç varsa önerilir.
+- **Belirsizlik** (`core/risk.js`): her bacak için %90 alt sınır. σ = bacak enerjisi × √(model² + hava²);
+  model %6 (kalibrasyonsuz) / %3 (≥ 3 OBD yolculuğu), hava = model senaryoları yayılımı / 4.
+- **Zamanın değeri:** Hesap menüsünde TL/saat girilirse planlayıcı ucuz–yavaş ile pahalı–hızlı arasında buna göre seçer.
+- **İsabet** (`core/isabet.js`): OBD yolculuklarında tahmin/ölçüm ortalama mutlak hatası; OBD panelinde.
+- Yolda modunda yeniden planlama da aynı en iyi planlayıcıyı kullanır.

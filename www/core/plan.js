@@ -105,7 +105,13 @@ export function durakPlanla(bolumler, istasyonlar, k, opt = {}) {
     soc = hedef - socDus(sapmaKwh(s) / 2, kap);
   }
   if (!sorun && duraklar.length > o.enFazlaDurak) sorun = { tur: 'cok-durak', mesaj: 'Durak sayısı sınırı aşıldı' };
+  return planiTamamla({ e, bolumler, duraklar, aday, k, o, soc, pos, sorun });
+}
 
+// Seçilen duraklardan sonraki ortak iş: yedekler, ısıl geçiş, özet, profil. Açgözlü ve en iyi
+// (optimum.js) planlayıcı aynı çıktı biçimini üretir.
+export function planiTamamla({ e, bolumler, duraklar, aday, k, o, soc, pos, sorun = null, ek = {} }) {
+  const L = e.toplamKm, kap = k.kap;
   const varis = soc - socDus(aralikKwh(e, pos, L), kap);
   // Yedek, asıl durağa yakın olmalı: yola çıkar çıkmaz karşılaşılan istasyon, 150 km ileride
   // kapalı çıkan durağın gerçek alternatifi değildir. Önceki duraktan bu durağa yolun ikinci
@@ -122,14 +128,16 @@ export function durakPlanla(bolumler, istasyonlar, k, opt = {}) {
   const son = yedekli.length ? yedekli : duraklar;
   const termal = termalGecis(e, bolumler, son, k, o);
   const sarjDkToplam = son.reduce((t, d) => t + d.dk, 0);
+  // İstasyona sapma sürüşü (gidiş-dönüş, ~40 km/h): planlar karşılaştırılırken gerçek maliyettir.
+  const sapmaDk = Math.round(son.reduce((t, d) => t + 2 * (d.istasyon.sapmaKm || 0) / 40 * 60, 0));
   return {
     duraklar: son, termal,
     varisSoc: +varis.toFixed(1),
     surusDk: Math.round(e.surusDk), sarjDk: sarjDkToplam,
-    toplamDk: Math.round(e.surusDk + sarjDkToplam),
+    sapmaDk, toplamDk: Math.round(e.surusDk + sarjDkToplam + sapmaDk),
     toplamKm: +L.toFixed(1), toplamKwh: +e.toplamKwh.toFixed(1), ortWh: Math.round(e.ortWh),
     profil: socProfili(e, k.soc0, son, kap),
-    enerji: e, sorun,
+    enerji: e, sorun, ...ek,
   };
 }
 
