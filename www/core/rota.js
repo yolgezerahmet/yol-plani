@@ -74,6 +74,7 @@ export function profil(edges) {
       egimAgirlikli: Math.max(-tavan, Math.min(tavan, sayi(e.wgrade ?? e.weighted_grade))),
       egimSuphe: Math.abs(up) > tavan || Math.abs(down) > tavan,
       rakim: sayi(e.ele ?? e.mean_elevation, 0),
+      adlar: Array.isArray(e.names) ? e.names : (e.adlar || []),
     };
   });
 }
@@ -319,6 +320,7 @@ export function bolumle(edges, ham_h, opt = {}) {
       gecisKayipKwh: +io.reduce((t, x) => t + gecisKwh(x.yuksek, x.dusuk, kutle, verim), 0).toFixed(2),
       olayDk: +(io.reduce((t, x) => t + (x.saniye || 0), 0) / 60).toFixed(1),
       hiz: Math.round(s.limit * virajKat),
+      adlar: [...new Set(ic.flatMap(e => e.adlar || []))].slice(0, 6),
     };
   });
 

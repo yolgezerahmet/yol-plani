@@ -32,3 +32,29 @@ pazartesi çalıştırır, değişiklik varsa işler ve APK derlemesini başlat�
 ## Gerçek rotada kapsam (Ayrancı → Kahramanmaraş)
 
 Her iki alternatifte de rotaya 5 km içinde ~480 hızlı istasyon; en büyük boşluk 57–62 km.
+
+## Hava: çok kaynak ve sınama (Eylül 2026)
+
+- **Topluluk:** Open-Meteo tek istekte dört bağımsız model: ECMWF IFS, DWD ICON, NOAA GFS, Météo-France.
+  Saat saat ortanca kullanılır; rüzgâr yönü (u, v) bileşenlerinden birleştirilir. Modeller arası açılma
+  sıcaklıkta ≥ 5 °C ya da rüzgârda ≥ 6 m/s olursa "tahmin belirsiz" uyarısı çıkar.
+- **Senaryo bandı:** Her model ayrı çalıştırılır; özet "4 hava modeline göre varış %X ile %Y arasında" der.
+- **Gözlem sınaması:** NOAA aviationweather.gov METAR (rota kutusundaki havalimanları, son 2 saat).
+  En az iki istasyon aynı yönde ≥ 2 °C sapıyorsa ilk saatler ölçüme çekilir, düzeltme 6 saatte söner.
+- Topluluk alınamazsa tek model (eski yol); METAR alınamazsa sınama atlanır.
+
+## Yol durumu
+
+- **KGM Günlük Yol Durumu Bülteni** (kgm.gov.tr, HTML tablo): yapım, bakım, şerit kapatma, kapalı yollar.
+  Rotaya eşleme: Valhalla'nın OSM yol adları (güçlü) ya da bülten metnindeki yer adlarının rotaya
+  yakınlığı (en az iki yer; şehir çevre yolunda bir yer). Yön bildiren adlar ("Ankara istikameti") sayılmaz.
+  Yer sözlüğü EPDK paketindeki il/ilçe adlarından çevrimdışı çıkarılır. Eşleme yaklaşıktır; ekranda böyle söylenir.
+
+## Bilinçli olarak yapılmayanlar / açık konular
+
+- **Canlı trafik:** Türkiye geneli için açık, anahtarsız bir canlı trafik akışı yok. Canlı trafik ve
+  yeniden rotalama "Yola çık" ile açılan Google Haritalar'da kalıyor. Aday: KGM Trafik Hacim Haritaları
+  (yıllık ortalama günlük trafik) ve bayram/tatil takvimiyle yoğunluk uyarısı.
+- **EDS / hız koridorları:** EGM'nin resmî EDS haritası (onlineislemler.egm.gov.tr) sabit noktaları ve
+  koridorları yayımlıyor; veri uç noktası henüz incelenmedi. Amaç ceza kaçırmak değil, koridorlarda gerçek
+  seyir hızını (limit) modele doğru vermek. Gezici radar konumu toplanmaz ve gösterilmez.

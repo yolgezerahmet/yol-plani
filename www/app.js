@@ -1,8 +1,19 @@
 // Plan ekranı. Hesap çekirdeği www/core altında; bu dosya yalnızca veri toplar, çağırır ve çizer.
 import { VARSAYILAN, TIP } from './core/model.js';
 import { ARACLAR, VARSAYILAN_ARAC, aracUygula } from './core/arac.js';
-import { havaGetir, havaUygula } from './core/hava.js';
-import { durakPlanla } from './core/plan.js';
+import { havaGetir, havaUygula, ornekNoktalari } from './core/hava.js';
+import { cokluHavaGetir, modelNoktasi, belirsizlik, MODEL_AD } from './core/hava-coklu.js';
+import { durakPlanla, enerjiEgrisi } from './core/plan.js';
+import { bultenGetir, yerSozlugu, rotadakiKayitlar } from './core/kgm.js';
+
+// KGM bülteni günde bir yayımlanıyor; bir saatlik önbellek yeter.
+let kgmOnbellek = null, sozlukOnbellek = null;
+async function kgmBulteni() {
+  if (kgmOnbellek && Date.now() - kgmOnbellek.t < 3600e3) return kgmOnbellek.b;
+  const b = await bultenGetir(fetch);
+  kgmOnbellek = { t: Date.now(), b };
+  return b;
+}
 import { yerAra, rotaGetir, rotaIstasyonlari, paketAc } from './core/servis.js';
 import { obdPaneli, kalibrasyon, olcumler } from './obd-ekran.js';
 import { yolculukMaliyeti, evSarjiEtkisi, asimAyi, OPERATORLER, FIYAT_TARIHI, MESKEN_SINIRI } from './core/maliyet.js';
@@ -111,13 +122,27 @@ $('planla').onclick = async () => {
     if (!rotalar.length) throw new Error('Bu iki nokta arasında rota bulunamadı');
     const pk = await paket();
     durum.sonuclar = [];
+    let bulten = null;
+    try { bulten = await kgmBulteni(); sozlukOnbellek ??= yerSozlugu(pk.istasyonlar); } catch { bulten = null; }
     for (const [i, r] of rotalar.entries()) {
       bildir(`Rota ${i + 1}: hava tahmini…`);
-      let bolumler = r.bolumler, havaVar = false;
+      let bolumler = r.bolumler, havaVar = false, hava = null;
+      const sureFn = b => b.km / Math.max(5, b.hiz * hizKat * (b.akisOrani || 0.9)) * 60 + (b.olayDk || 0);
       try {
-        const noktalar = await havaGetir(bolumler);
-        const sureFn = b => b.km / Math.max(5, b.hiz * hizKat * (b.akisOrani || 0.9)) * 60 + (b.olayDk || 0);
-        bolumler = havaUygula(bolumler, noktalar, cikisMs, sureFn); havaVar = true;
+        // Önce model topluluğu + gözlem sınaması; olmazsa tek model.
+        try { hava = await cokluHavaGetir(ornekNoktalari(bolumler), fetch); } catch { hava = null; }
+        const kaynak = hava?.birlesik?.length ? hava.birlesik : await havaGetir(bolumler);
+        bolumler = havaUygula(bolumler, kaynak, cikisMs, sureFn); havaVar = true;
+        if (hava) {
+          const surus = r.bolumler.reduce((t, b) => t + sureFn(b), 0);
+          hava.belirsizlik = belirsizlik(hava.birlesik, cikisMs, cikisMs + surus * 60e3);
+          // Her model ayrı senaryo: toplam enerji ne kadar oynuyor?
+          hava.senaryo = Object.keys(hava.ham[0]?.modeller || {}).map(md => {
+            const nk = hava.ham.map(p => modelNoktasi(p, md));
+            if (nk.some(x => !x)) return null;
+            return { md, kwh: enerjiEgrisi(havaUygula(r.bolumler, nk, cikisMs, sureFn), k, { hizKat }).toplamKwh };
+          }).filter(Boolean);
+        }
       } catch { /* havasız devam: genel koşullar kullanılır */ }
       bildir(`Rota ${i + 1}: yol üstündeki istasyonlar…`);
       const ist = { istasyonlar: rotaIstasyonlari(r.sekil, pk.istasyonlar) };
@@ -126,7 +151,9 @@ $('planla').onclick = async () => {
         bataryaT0: garaj === '' ? undefined : +garaj,
         sicaklikTablosu: kal?.sicaklikTablosu || undefined,
       });
-      durum.sonuclar.push({ rota: r, bolumler, plan, ist, havaVar, k });
+      const yolAdlari = [...new Set(r.bolumler.flatMap(b => b.adlar || []))];
+      const yol = bulten ? { tarih: bulten.tarih, kayit: rotadakiKayitlar(bulten, r.sekil, sozlukOnbellek, { yolAdlari }) } : null;
+      durum.sonuclar.push({ rota: r, bolumler, plan, ist, havaVar, hava, yol, k });
     }
     durum.secili = 0;
     bildir('');
@@ -168,10 +195,17 @@ function ciz() {
   const maliyetMetni = n
     ? ` Şarj maliyeti yaklaşık <strong>${sayi(m.sarjTl)} TL</strong>${m.evTutar != null ? `, evde doldurduğun kısımla birlikte ${sayi(m.toplamTl)} TL (km başı ${sayi(m.kmBasiTl, 2)} TL)` : ''}.`
     : (m.evTutar != null ? ` Enerji maliyeti yaklaşık ${sayi(m.evTutar)} TL (ev elektriği).` : '');
+  let havaMetni = '';
+  const sc = s.hava?.senaryo || [];
+  if (sc.length >= 2) {
+    const v = sc.map(x => p.varisSoc - (x.kwh - p.toplamKwh) / s.k.kap * 100);
+    const lo = Math.round(Math.min(...v)), hi = Math.round(Math.max(...v));
+    havaMetni = lo === hi ? ` ${sc.length} hava modeli aynı sonucu veriyor.` : ` ${sc.length} hava modeline göre varış %${lo} ile %${hi} arasında.`;
+  }
   $('ozet').innerHTML = `<strong>${sure(p.toplamDk)}</strong> yolculuk, ${n ? `<strong>${n}</strong> şarj durağı (${sure(p.sarjDk)})` : 'şarj durağı yok'}, varışta <strong>%${sayi(p.varisSoc)}</strong>. `
     + `Ortalama ${sayi(p.ortWh)} Wh/km, toplam ${sayi(p.toplamKwh, 1)} kWh.`
     + (p.termal?.onIsitmaKazanciDk >= 3 ? ` Ön ısıtma şarj süresini ${p.termal.onIsitmaKazanciDk} dk kısaltıyor.` : '')
-    + maliyetMetni + (cumle ? ' ' + cumle : '');
+    + havaMetni + maliyetMetni + (cumle ? ' ' + cumle : '');
 
   const u = [];
   if (p.sorun) u.push(`<p class="uyari">${kacis(p.sorun.mesaj)}. Menzili uzatmak için hızı düşürmeyi ya da çıkış bataryasını artırmayı deneyin.</p>`);
@@ -181,6 +215,21 @@ function ciz() {
   if (tl > 20) u.push(`<p class="bilgi">${sayi(tl)} km'de hız sınırı haritada etiketli değil; yol türünden tahmin edildi.</p>`);
   const yas = Math.round((Date.now() - Date.parse(epdkPaketi.tarih)) / 864e5);
   if (yas > 21) u.push(`<p class="bilgi">İstasyon listesi ${yas} gün önce alındı; yeni açılan istasyonlar eksik olabilir.</p>`);
+  const hv = s.hava;
+  if (hv?.belirsizlik?.yuksek) {
+    const b = hv.belirsizlik, r = b.ruzgar.deger >= 6 ? `rüzgârda ${sayi(b.ruzgar.deger * 3.6)} km/h (${sayi(b.ruzgar.km)}. km civarı)` : `sıcaklıkta ${sayi(b.T.deger)} °C (${sayi(b.T.km)}. km civarı)`;
+    u.push(`<p class="bilgi">Hava modelleri ${r} ayrışıyor; tahmin bu yolculuk için belirsiz. Çıkıştan kısa süre önce planı yenile.</p>`);
+  }
+  if (hv?.sinama?.length) {
+    const g = hv.sinama.slice(0, 3).map(x => `${kacis(x.ad)} ${sayi(Math.round(x.olculen) || 0)} °C (tahmin ${sayi(Math.round(x.tahmin) || 0)})`).join(', ');
+    u.push(`<p class="bilgi">Ölçüm sınaması: ${g}.${hv.duzeltme ? ` Tahmin ölçümlerden ${sayi(Math.abs(hv.duzeltme.farkT), 1)} °C ${hv.duzeltme.farkT < 0 ? 'sıcak' : 'soğuk'} kalıyordu; ilk saatler ölçüme göre düzeltildi.` : ' Tahminle uyumlu.'}</p>`);
+  }
+  if (s.yol?.kayit?.length) {
+    const t = s.yol.tarih ? s.yol.tarih.split('-').reverse().join('.') : '';
+    u.push(`<div class="uyari yol"><p>Yol durumu (KGM bülteni ${t}): ${s.yol.kayit.length} kayıt rotanla ilgili olabilir.</p><ul>${s.yol.kayit.map(x =>
+      `<li><b>${kacis(x.ozet)}</b>, yaklaşık ${sayi(x.kmAralik[0])}${x.kmAralik[1] - x.kmAralik[0] > 10 ? '–' + sayi(x.kmAralik[1]) : ''}. km${x.guclu ? '' : ' (yer adından eşlendi)'}.
+       <details><summary>Bülten metni</summary><p class="kucuk">${kacis(x.metin)}</p></details></li>`).join('')}</ul></div>`);
+  } else if (s.yol) u.push(`<p class="bilgi">KGM yol durumu bülteninde (${s.yol.tarih ? s.yol.tarih.split('-').reverse().join('.') : 'güncel'}) bu rotayla eşleşen çalışma ya da kapanma yok.</p>`);
   if (m.ucretliKm >= 5) u.push(`<p class="bilgi">Rotanın ${sayi(m.ucretliKm)} km'si ücretli yol (otoyol, köprü ya da tünel); geçiş ücreti şarj maliyetine eklenmedi.</p>`);
   if (m.tahminVar) u.push(`<p class="bilgi">Bazı operatörlerin fiyatı bilinmiyor; tahmini değer kullanıldı. Hesap menüsünden kendi fiyatını girebilirsin.</p>`);
   $('uyarilar').innerHTML = u.join('');
@@ -198,7 +247,7 @@ function ciz() {
   const olc = olcumler();
   $('duraklar').innerHTML = p.duraklar.map((d, i) => durakHtml(d, m.duraklar[i], olc)).join('');
   $('bolumler').innerHTML = bolumTablosu(s);
-  $('kaynak').textContent = `Rota ve rakım: Valhalla (OpenStreetMap). Hava: Open-Meteo. İstasyonlar ve konumları: EPDK şarj istasyonları servisi, ${epdkPaketi.tarih}. Müsaitlik canlı değildir.`;
+  $('kaynak').textContent = `Rota ve rakım: Valhalla (OpenStreetMap). Hava: ${s.hava?.senaryo?.length ? s.hava.senaryo.map(x => MODEL_AD[x.md]).join(', ') + ' modelleri (Open-Meteo), gözlem NOAA METAR' : 'Open-Meteo'}.${s.yol ? ' Yol durumu: KGM günlük bülteni.' : ''} İstasyonlar ve konumları: EPDK şarj istasyonları servisi, ${epdkPaketi.tarih}. Müsaitlik canlı değildir.`;
 }
 
 // Android'de geo: adresi varsayılan harita uygulamasını açar (Google Haritalar, Yandex, OsmAnd).

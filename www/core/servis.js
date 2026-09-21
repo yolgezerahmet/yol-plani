@@ -54,7 +54,7 @@ export function paketAc(p) {
     istasyonlar: p.s.map(r => ({
       id: 'epdk:' + r[i.no], no: 'ŞRJ/' + r[i.no], ad: r[i.ad], marka: r[i.marka],
       operator: p.operatorler[r[i.op]] || '', enlem: r[i.enlem], boylam: r[i.boylam],
-      kw: r[i.dcKw], soketSayisi: r[i.ccsSoket], ilce: r[i.ilce], il: r[i.ilce] || r[i.il],
+      kw: r[i.dcKw], soketSayisi: r[i.ccsSoket], ilce: r[i.ilce], il: r[i.ilce] || r[i.il], ilAdi: r[i.il] || null,
       yesil: !!r[i.yesil], kaynak: 'epdk', konum: 'kesin', guven: 1,
     })),
   };
