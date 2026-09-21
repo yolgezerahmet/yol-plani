@@ -137,7 +137,7 @@ Plan ekranındaki "Yolda modunu başlat" ile açılır. Çekirdek `core/canli.js
 - **Ön ısıtma hatırlatması:** planın söylediği km'de, hücre hâlâ soğuksa.
 - **Durakta:** OBD DC şarjı görünce hedefe kalan dakika, anlık kW, istasyon beklenenden yavaşsa uyarı, hedefe varınca "yola çıkabilirsin" (işgaliye).
 - **Tazeleme:** 30 dakikada bir kalan yolun havası yeniden alınır ve plan güncellenir.
-- Ekran açık tutulur (Wake Lock). Bilinen sınır: Android WebView'de tarayıcı ses sentezi her cihazda yok; yoksa titreşim + ekran kalır. Ekran kapalıyken çalışma için yerel ön plan servisi gerekir (henüz yok).
+- Ekran açık tutulur (Wake Lock). Arka plan: aşağıdaki ön plan servisi.
 
 ## En iyi durak planı, hız önerisi, belirsizlik (Eylül 2026)
 
@@ -153,3 +153,15 @@ Plan ekranındaki "Yolda modunu başlat" ile açılır. Çekirdek `core/canli.js
 - **Zamanın değeri:** Hesap menüsünde TL/saat girilirse planlayıcı ucuz–yavaş ile pahalı–hızlı arasında buna göre seçer.
 - **İsabet** (`core/isabet.js`): OBD yolculuklarında tahmin/ölçüm ortalama mutlak hatası; OBD panelinde.
 - Yolda modunda yeniden planlama da aynı en iyi planlayıcıyı kullanır.
+
+## Ön plan servisi: Haritalar öndeyken ve ekran kilitliyken (Eylül 2026)
+
+Yerel Capacitor eklentisi `plugins/yol-servisi` (Java), JS tarafı `www/servis.js`.
+- Servis türü konum + bağlı cihaz; bildirim çubuğunda sürekli kart. Kısmi uyanık tutma kilidi (en çok 10 sa).
+- **Tik:** 5 sn'de bir yerel olay. OBD okuması ve karar hesabı buna bağlı; tarayıcı zamanlayıcıları arka planda kısılsa da sürer.
+- **Konum:** GPS doğrudan servisten; tarayıcı konumu yedek (yerel son 10 sn'de geldiyse yok sayılır).
+- **Ses:** Android metin okuması, navigasyon kılavuzu ses türüyle; navigasyonu susturmaz, kısar (ducking). Türkçe ses paketi yoksa uyarı.
+- **Bildirim kartı:** "Kırşehir ZES: 42 km, 25 dk · varışta %24 (plan %24)"; düğmeler: Yeniden planla, Durağa git. Şarjda: hedefe kalan dakika, kW, "Yola devam".
+- **Bekçi:** JS 45 sn bildirimi güncellemezse kart "yanıt vermiyor" der. Arka planda WebView'in çalışıp çalışmadığı cihazda böyle görülür.
+- Kullanıcılar: yolda modu ve OBD kaydı; ikisi de bırakınca servis durur.
+- Doğrulanmadı: WebView JS'inin arka planda yerel olaylarla sürmesi (Android/WebView sürümüne bağlı). Durursa sıradaki adım karar hesabını servis içinde QuickJS ile çalıştırmak.

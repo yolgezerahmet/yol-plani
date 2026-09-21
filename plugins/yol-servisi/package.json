@@ -1,0 +1,7 @@
+{
+  "name": "yol-servisi",
+  "version": "0.1.0",
+  "description": "Yol Planı ön plan servisi: arka planda konum, 5 sn'lik tik, sesli uyarı ve canlı bildirim",
+  "private": true,
+  "capacitor": { "android": { "src": "android" } }
+}

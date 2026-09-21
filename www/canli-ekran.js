@@ -4,6 +4,7 @@ import { onIsitmaHarcanan, rotaKonumu, canliKat, canliDurum, canliMesaj, sarjDur
 import { sarjDk } from './core/model.js';
 import { aralikKwh } from './core/plan.js';
 import { obdDinle, obdBagli, obdKaydiAc } from './obd-ekran.js';
+import { servisAl, servisBirak, servisGuncelle, servisSoyle, servisVar, periyodik, konumDinle, eylemDinle, hataDinle } from './servis.js';
 
 const $ = id => document.getElementById(id);
 const sayi = (x, b = 0) => Number(x).toLocaleString('tr-TR', { maximumFractionDigits: b, minimumFractionDigits: b });
@@ -16,7 +17,8 @@ function soyle(anahtar, metin) {
   if (!c || c.soylenen.has(anahtar)) return;
   c.soylenen.add(anahtar);
   try { navigator.vibrate?.([200, 100, 200]); } catch {}
-  if (c.ses && 'speechSynthesis' in window) {
+  // Önce Android metin okuması (arka planda da çalışır, navigasyon sesini kısar); yoksa tarayıcınınki.
+  if (c.ses && !servisSoyle(metin) && 'speechSynthesis' in window) {
     try { const u = new SpeechSynthesisUtterance(metin); u.lang = 'tr-TR'; speechSynthesis.speak(u); } catch {}
   }
   $('canliUyari').textContent = metin;
@@ -50,6 +52,9 @@ function ciz() {
     $('canliVaris').textContent = `Şimdi %${sayi(b.soc)}${s.gucKw != null ? `, ${s.gucKw} kW` : ''}`;
     $('canliKarar').textContent = s.tamam ? 'Yola çıkabilirsin. Dolu araçla beklemek işgaliye ücreti doğurabilir.' : s.yavas ? `İstasyon beklenenden yavaş veriyor (${durakta.istasyon.kw} kW yazıyor).` : 'Şarj planlandığı gibi.';
     $('canliKarar').dataset.durum = s.tamam ? 'iyi' : s.yavas ? 'dar' : 'iyi';
+    servisGuncelle({ baslik: s.tamam ? `Şarj tamam: %${Math.round(b.soc)}` : `Şarjda: %${Math.round(b.soc)} → %${s.hedef}, ${s.kalanDk} dk`,
+                     metin: `${durakta.istasyon.marka || ''} ${durakta.istasyon.ad}`.trim() + (s.gucKw != null ? ` · ${s.gucKw} kW` : ''),
+                     gitUrl: c.sonrakiUrl || c.varisUrl, gitAd: 'Yola devam' });
     if (s.tamam) soyle('sarj-tamam:' + durakta.no, `Batarya yüzde ${s.hedef}. Yola çıkabilirsin.`);
     return;
   }
@@ -69,6 +74,15 @@ function ciz() {
   const hedef = d.sira?.istasyon || null;
   $('canliGit').href = hedef ? `https://www.google.com/maps/dir/?api=1&destination=${hedef.enlem},${hedef.boylam}&travelmode=driving&dir_action=navigate` : c.varisUrl;
   $('canliGit').textContent = hedef ? 'Bu durağa yönlendir' : 'Varışa yönlendir';
+
+  // Bildirim: Haritalar öndeyken sürücünün gördüğü kart.
+  const gitUrl = $('canliGit').href;
+  c.sonrakiUrl = gitUrl;
+  servisGuncelle({
+    baslik: d.bitti ? 'Vardın' : `${hedef ? (hedef.marka || hedef.ad) : 'Varış'}: ${sayi(d.kalanKm)} km, ${sure(d.kalanDk)}`,
+    metin: `Varışta %${sayi(d.hedefVarisSoc)} (plan %${sayi(d.planHedefVarisSoc)}) · şimdi %${sayi(b.soc)}${b.kaynak === 'obd' ? '' : ' (tahmini)'} · ${metin}`,
+    gitUrl, gitAd: hedef ? 'Durağa git' : 'Varışa git',
+  });
 
   const m = canliMesaj(d);
   if (m) soyle(m.anahtar, m.metin);
@@ -114,6 +128,13 @@ export function canliBaslat({ sonuc, varisSoc, hizKat, onIsitma, sicaklikTablosu
         km: 0, kat: 1, rotaDisi: false, cipa: { km: 0, soc: sonuc.k.soc0 }, obd: null, obdBas: null,
         soylenen: new Set(), otomatik: new Set(), ses: true, havaT: Date.now(), planNotu: '' };
   $('canli').hidden = false; document.body.classList.add('canli-acik');
+  // Ön plan servisi: Haritalar'a geçince ya da ekran kilitlenince takip ve ses sürer.
+  servisAl('canli', { baslik: 'Yol Planı: yolda', metin: 'Plan izleniyor' }).then(ok => {
+    if (!ok && servisVar()) $('canliUyari').textContent = 'Arka plan servisi başlatılamadı: Haritalar öndeyken takip durabilir. Konum iznini kontrol et.';
+  });
+  c.eylemKes = eylemDinle(ad => { if (ad === 'yeniden') planla(''); });
+  c.hataKes = hataDinle(h => { if (c) $('canliUyari').textContent = h; });
+  c.tikKes = periyodik(5000, () => ciz());
   $('canliUyari').textContent = obdBagli() ? '' : 'OBD bağlı değil: batarya plandan tahmin ediliyor. Göstergedeki değeri girersen tahmin düzelir.';
   ekranAcikTut();
   c.gorunur = () => { if (document.visibilityState === 'visible' && c) ekranAcikTut(); };
@@ -129,15 +150,13 @@ export function canliBaslat({ sonuc, varisSoc, hizKat, onIsitma, sicaklikTablosu
     ciz();
   });
 
-  if (navigator.geolocation) {
-    c.izleme = navigator.geolocation.watchPosition(p => {
-      if (!c || p.coords.accuracy > 80) return;
-      const r = rotaKonumu({ enlem: p.coords.latitude, boylam: p.coords.longitude }, c.sekil, c.km);
-      c.km = r.km; c.rotaDisi = r.rotaDisi; c.konum = { lat: p.coords.latitude, lon: p.coords.longitude };
-      ciz();
-      if (Date.now() - c.havaT > HAVA_TAZELE_MS && !r.rotaDisi) { c.havaT = Date.now(); planla('Hava tahmini tazelendi;'); }
-    }, () => { $('canliUyari').textContent = 'Konum alınamıyor. Konum iznini ve GPS\'i kontrol et.'; }, { enableHighAccuracy: true, maximumAge: 4000 });
-  } else $('canliUyari').textContent = 'Bu cihazda konum servisi yok.';
+  c.konumKes = konumDinle(k => {
+    if (!c || k.dogruluk > 80) return;
+    const r = rotaKonumu({ enlem: k.enlem, boylam: k.boylam }, c.sekil, c.km);
+    c.km = r.km; c.rotaDisi = r.rotaDisi; c.konum = { lat: k.enlem, lon: k.boylam };
+    ciz();
+    if (Date.now() - c.havaT > HAVA_TAZELE_MS && !r.rotaDisi) { c.havaT = Date.now(); planla('Hava tahmini tazelendi;'); }
+  }, () => { if (c) $('canliUyari').textContent = 'Konum alınamıyor. Konum iznini ve GPS\'i kontrol et.'; });
 
   $('canliYeniden').onclick = () => planla('');
   $('canliSes').onclick = () => { c.ses = !c.ses; $('canliSes').textContent = c.ses ? 'Ses açık' : 'Ses kapalı'; if (!c.ses) try { speechSynthesis.cancel(); } catch {} };
@@ -152,7 +171,8 @@ export function canliBaslat({ sonuc, varisSoc, hizKat, onIsitma, sicaklikTablosu
 
 export function canliBitir() {
   if (!c) return;
-  if (c.izleme != null) navigator.geolocation.clearWatch(c.izleme);
+  c.konumKes?.(); c.tikKes?.(); c.eylemKes?.(); c.hataKes?.();
+  servisBirak('canli');
   c.obdKes?.(); document.removeEventListener('visibilitychange', c.gorunur);
   try { c.kilit?.release(); } catch {}
   try { speechSynthesis?.cancel(); } catch {}

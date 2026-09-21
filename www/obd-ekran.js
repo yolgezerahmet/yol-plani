@@ -6,6 +6,7 @@ import { sarjOturumlari, sicaklikTablosu, kapasiteTahmini, tuketimKatsayisi } fr
 import { mesafeKm } from './core/istasyon.js';
 import { olcumOzeti } from './core/olcum.js';
 import { isabet } from './core/isabet.js';
+import { servisAl, servisBirak, periyodik, konumDinle } from './servis.js';
 
 const $ = id => document.getElementById(id);
 const sayi = (x, b = 0) => x == null || Number.isNaN(x) ? '–' : Number(x).toLocaleString('tr-TR', { maximumFractionDigits: b, minimumFractionDigits: b });
@@ -90,13 +91,12 @@ async function tekOku() {
 }
 
 function konumIzle() {
-  if (!navigator.geolocation) return;
-  obd.izleme = navigator.geolocation.watchPosition(p => {
-    if (p.coords.accuracy > 50) return;
-    const n = [p.coords.latitude, p.coords.longitude];
+  obd.konumKes = konumDinle(k => {
+    if (k.dogruluk > 50) return;
+    const n = [k.enlem, k.boylam];
     if (obd.sonKonum) { const d = mesafeKm(obd.sonKonum, n); if (d > 0.02 && d < 5) obd.km += d; }
     obd.sonKonum = n;
-  }, () => {}, { enableHighAccuracy: true, maximumAge: 5000 });
+  });
 }
 
 function tamponuYaz() {
@@ -126,14 +126,17 @@ function kaydiBaslat(plan) {
       $('obdKayitBilgi').textContent = `Kayıt sürüyor: bu yolculuk ${sayi(obd.km, 1)} km${d.dcSarj ? ', DC şarj kaydediliyor' : ''}.`;
     } catch (e) { gunlukYaz('kayıt', e.message); }
   };
-  tur(); obd.zamanlayici = setInterval(tur, 5000);
+  // Ekran kilitliyken ya da Haritalar öndeyken de sürsün: ön plan servisi.
+  servisAl('kayit', { baslik: 'Yol Planı', metin: 'OBD kaydı sürüyor' });
+  obd.zamanlayici = periyodik(5000, tur);
   $('obdKayit').textContent = 'Kaydı durdur';
 }
 
 function kaydiDurdur() {
-  clearInterval(obd.zamanlayici); obd.zamanlayici = null;
+  obd.zamanlayici?.(); obd.zamanlayici = null;
   tamponuYaz();
-  if (obd.izleme != null) navigator.geolocation.clearWatch(obd.izleme); obd.izleme = null;
+  obd.konumKes?.(); obd.konumKes = null;
+  servisBirak('kayit');
   $('obdKayit').textContent = 'Kaydı başlat';
   // Planlı bir yolculuk tamamlandıysa tüketim karşılaştırması için sakla.
   const y = obd.yolculuk;
