@@ -67,3 +67,39 @@ test('konum, yol adının uçlarından değil özgül yer adından', () => {
   const r = rotadakiKayitlar(bultenCoz(HTML), SEKIL, yerSozlugu(IST));
   assert.ok(r[0].kmAralik[0] > 100, JSON.stringify(r[0].kmAralik));
 });
+
+// ---- Kapalı yollar (resmî JSON; 21.09.2026 yanıtından gerçek kayıtlar) ----
+import { kapaliCoz, rotadakiKapali } from '../www/core/kgm.js';
+const KAPALI = { success: true, data: [
+  { id: 1, reason: 'Heyelan', roadNo: '010-10', startKm: 49, endKm: 50, shortDescription: 'CİDE-İNEBOLU', winterProgram: 'D', updateTime: '2026-09-20T09:00:00', extent: [33.30, 42.01, 33.31, 42.01] },
+  { id: 2, reason: 'Yol Çalışması', roadNo: '31-78', startKm: 0, endKm: 4, shortDescription: 'Osmaniye OSB-Liman Bağlantı Yolu', winterProgram: '', updateTime: '2026-09-20T10:00:00', extent: [36.09, 36.98, 36.11, 37.01] },
+  { id: 3, reason: 'Çökme', roadNo: 'x', extent: null },
+] };
+
+test('kapalı yol kayıtları çözülür, kutusu olmayan atlanır', () => {
+  const k = kapaliCoz(KAPALI);
+  assert.equal(k.length, 2);
+  assert.deepEqual(k[0].kutu, { b0: 33.30, e0: 42.01, b1: 33.31, e1: 42.01 });
+  assert.equal(k[0].guncelleme, '2026-09-20');
+  assert.deepEqual(kapaliCoz(null), []);
+});
+
+test('rota kutudan geçiyorsa kayıt rota km aralığıyla döner; geçmiyorsa dönmez', () => {
+  const k = kapaliCoz(KAPALI);
+  // Cide–İnebolu sahil yolu boyunca batıdan doğuya bir şekil ([enlem, boylam])
+  const sahil = Array.from({ length: 60 }, (_, i) => [42.01, 33.00 + i * 0.01]);
+  const r = rotadakiKapali(k, sahil);
+  assert.equal(r.length, 1); assert.equal(r[0].yolNo, '010-10');
+  assert.ok(r[0].rotaKm[0] > 23 && r[0].rotaKm[0] < 26, String(r[0].rotaKm));
+  // Ankara–Kahramanmaraş doğrultusu hiçbirine değmez (Osmaniye kutusu 60 km güneybatıda kalır)
+  const ic = Array.from({ length: 100 }, (_, i) => [39.9 - i * 0.0233, 32.86 + i * 0.0406]);
+  assert.deepEqual(rotadakiKapali(k, ic), []);
+});
+
+test('dar kutu, rotadan 200 m kaymış olsa da yakalanır; 2 km uzaktaki yakalanmaz', () => {
+  const k = kapaliCoz(KAPALI);
+  const yakin = Array.from({ length: 60 }, (_, i) => [42.0118, 33.00 + i * 0.01]);
+  const uzak = Array.from({ length: 60 }, (_, i) => [42.03, 33.00 + i * 0.01]);
+  assert.equal(rotadakiKapali(k, yakin).length, 1);
+  assert.equal(rotadakiKapali(k, uzak).length, 0);
+});

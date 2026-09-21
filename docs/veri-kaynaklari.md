@@ -58,3 +58,28 @@ Her iki alternatifte de rotaya 5 km içinde ~480 hızlı istasyon; en büyük bo
 - **EDS / hız koridorları:** EGM'nin resmî EDS haritası (onlineislemler.egm.gov.tr) sabit noktaları ve
   koridorları yayımlıyor; veri uç noktası henüz incelenmedi. Amaç ceza kaçırmak değil, koridorlarda gerçek
   seyir hızını (limit) modele doğru vermek. Gezici radar konumu toplanmaz ve gösterilmez.
+
+## KGM kapalı yollar servisi (21.09.2026'da eklendi)
+
+- Uç: `https://yol.kgm.gov.tr/kapaliyollar/api/workings/search` — resmî "Kapalı Yollar" harita uygulamasının
+  kullandığı anahtarsız JSON. Belgelenmiş bir açık API değildir; arayüz değişirse kırılabilir, o durumda
+  ekranda "ulaşılamadı" yazar ve bülten eşlemesi çalışmaya devam eder.
+- Her kayıt: neden (heyelan, çökme, kar ve tipi, çığ, sel, kaza…), yol no, km aralığı, kış programı ve
+  `extent` = [boylamMin, enlemMin, boylamMax, enlemMax]. Sıra Cide–İnebolu kaydıyla doğrulandı.
+- Eşleme: rota şeklinin bir noktası kutunun 300 m paylı hâline düşüyorsa kayıt rotadadır. Bültendeki
+  yer adı eşlemesinin aksine kesindir.
+- CORS başlığı yok: tarayıcıda çalışmaz, APK'da CapacitorHttp ile çalışır. NOAA METAR için de aynısı geçerli.
+- Yalnızca "kapalı yol" listesi döner (21.09.2026: 21 kayıt). "Çalışma yapılan yol" listesi için sorgu
+  parametresi bulunamadı; o bilgi günlük bültenden gelmeye devam ediyor.
+
+## Bilinçli olarak eklenmeyenler
+
+- **MET Norway:** anahtarsız ve açık, ancak Türkiye için ECMWF'e dayanır; toplulukta ECMWF zaten var,
+  bağımsız bir görüş katmaz.
+- **MGM:** resmî açık API'si yok; bilinen uç başlık taklidi gerektiriyor. Gözlem için NOAA METAR kullanılıyor
+  (aynı havalimanı istasyonları, açık lisans).
+- **Canlı trafik yoğunluğu:** Türkiye geneli için açık ve anahtarsız bir kaynak yok. İBB açık verisi yalnızca
+  İstanbul'u kapsar. TomTom/HERE ücretsiz katmanları anahtar ister ve açık veri değildir. Bölüm süreleri
+  Valhalla'nın o kesim için ölçülü ortalama hızından gelir (günün saatine duyarsız).
+- **Gezici radar / anlık denetim:** toplanmaz. Sabit EDS ve ortalama hız koridorları OSM'den gelir ve eksiktir
+  (21.09.2026: 733 kamera, 16 koridor ilişkisi; gerçek sayı bunun katları).

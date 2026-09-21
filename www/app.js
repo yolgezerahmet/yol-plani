@@ -4,7 +4,7 @@ import { ARACLAR, VARSAYILAN_ARAC, aracUygula } from './core/arac.js';
 import { havaGetir, havaUygula, ornekNoktalari } from './core/hava.js';
 import { cokluHavaGetir, modelNoktasi, belirsizlik, MODEL_AD } from './core/hava-coklu.js';
 import { durakPlanla, enerjiEgrisi } from './core/plan.js';
-import { bultenGetir, yerSozlugu, rotadakiKayitlar } from './core/kgm.js';
+import { bultenGetir, yerSozlugu, rotadakiKayitlar, kapaliGetir, rotadakiKapali } from './core/kgm.js';
 import { KULLANIM_VARSAYILAN, TAVAN, LASTIK, KLIMA, kullanimUygula, kabinGecisKwh, yolculukKapasiteKat } from './core/kullanim.js';
 import { rotadakiDenetim } from './core/denetim.js';
 
@@ -137,6 +137,9 @@ $('planla').onclick = async () => {
     const dnt = await denetim();
     let bulten = null;
     try { bulten = await kgmBulteni(); sozlukOnbellek ??= yerSozlugu(pk.istasyonlar); } catch { bulten = null; }
+    // Resmî kapalı yol servisi: koordinat kutulu, kesin eşleme. Alınamazsa null (ekranda söylenir).
+    let kapali = null;
+    try { kapali = await kapaliGetir(fetch); } catch { kapali = null; }
     for (const [i, r] of rotalar.entries()) {
       bildir(`Rota ${i + 1}: hava tahmini…`);
       let bolumler = r.bolumler, havaVar = false, hava = null;
@@ -173,7 +176,7 @@ $('planla').onclick = async () => {
       });
       const yolAdlari = [...new Set(r.bolumler.flatMap(b => b.adlar || []))];
       const yol = bulten ? { tarih: bulten.tarih, kayit: rotadakiKayitlar(bulten, r.sekil, sozlukOnbellek, { yolAdlari }) } : null;
-      durum.sonuclar.push({ rota: r, bolumler, plan, ist, havaVar, hava, yol, k: kr, kul, etken: { kabinKwh, kapKat },
+      durum.sonuclar.push({ rota: r, bolumler, plan, ist, havaVar, hava, yol, kapali: kapali ? rotadakiKapali(kapali, r.sekil) : null, k: kr, kul, etken: { kabinKwh, kapKat },
                             denetim: dnt ? { tarih: dnt.tarih, liste: rotadakiDenetim(dnt, r.sekil) } : null });
     }
     durum.secili = 0;
@@ -257,6 +260,11 @@ function ciz() {
     const g = hv.sinama.slice(0, 3).map(x => `${kacis(x.ad)} ${sayi(Math.round(x.olculen) || 0)} °C (tahmin ${sayi(Math.round(x.tahmin) || 0)})`).join(', ');
     u.push(`<p class="bilgi">Ölçüm sınaması: ${g}.${hv.duzeltme ? ` Tahmin ölçümlerden ${sayi(Math.abs(hv.duzeltme.farkT), 1)} °C ${hv.duzeltme.farkT < 0 ? 'sıcak' : 'soğuk'} kalıyordu; ilk saatler ölçüme göre düzeltildi.` : ' Tahminle uyumlu.'}</p>`);
   }
+  if (s.kapali?.length) u.push(`<div class="uyari yol"><p><strong>Rotanda trafiğe kapalı yol var</strong> (KGM kapalı yollar servisi):</p><ul>${s.kapali.map(x =>
+    `<li>${sayi(x.rotaKm[0])}. km dolayı: ${kacis(x.ad)} (${kacis(x.yolNo)}, ${sayi(x.kmAralik[0])}–${sayi(x.kmAralik[1])}. km), neden: ${kacis(x.neden)}. Güncelleme ${x.guncelleme.split('-').reverse().join('.')}.</li>`).join('')}</ul>
+    <p>Rota motoru bu kapanmayı bilmez; yola çıkmadan alternatifi kontrol et.</p></div>`);
+  else if (s.kapali) u.push(`<p class="bilgi">KGM kapalı yollar servisine göre rotanda trafiğe kapalı kesim yok.</p>`);
+  else u.push(`<p class="bilgi">KGM kapalı yollar servisine ulaşılamadı; kapalı yol denetimi yapılamadı.</p>`);
   if (s.yol?.kayit?.length) {
     const t = s.yol.tarih ? s.yol.tarih.split('-').reverse().join('.') : '';
     u.push(`<div class="uyari yol"><p>Yol durumu (KGM bülteni ${t}): ${s.yol.kayit.length} kayıt rotanla ilgili olabilir.</p><ul>${s.yol.kayit.map(x =>
@@ -280,7 +288,7 @@ function ciz() {
   const olc = olcumler();
   $('duraklar').innerHTML = p.duraklar.map((d, i) => durakHtml(d, m.duraklar[i], olc)).join('');
   $('bolumler').innerHTML = bolumTablosu(s);
-  $('kaynak').textContent = `Rota ve rakım: Valhalla (OpenStreetMap). Hava: ${s.hava?.senaryo?.length ? s.hava.senaryo.map(x => MODEL_AD[x.md]).join(', ') + ' modelleri (Open-Meteo), gözlem NOAA METAR' : 'Open-Meteo'}.${s.yol ? ' Yol durumu: KGM günlük bülteni.' : ''} İstasyonlar ve konumları: EPDK şarj istasyonları servisi, ${epdkPaketi.tarih}. Müsaitlik canlı değildir.`;
+  $('kaynak').textContent = `Rota ve rakım: Valhalla (OpenStreetMap). Hava: ${s.hava?.senaryo?.length ? s.hava.senaryo.map(x => MODEL_AD[x.md]).join(', ') + ' modelleri (Open-Meteo), gözlem NOAA METAR' : 'Open-Meteo'}.${s.yol || s.kapali ? ' Yol durumu: KGM günlük bülteni ve kapalı yollar servisi.' : ''} İstasyonlar ve konumları: EPDK şarj istasyonları servisi, ${epdkPaketi.tarih}. Müsaitlik canlı değildir.`;
 }
 
 // Android'de geo: adresi varsayılan harita uygulamasını açar (Google Haritalar, Yandex, OsmAnd).

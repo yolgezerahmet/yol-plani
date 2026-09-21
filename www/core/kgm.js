@@ -118,3 +118,44 @@ export async function bultenGetir(getir = fetch) {
   if (!y.ok) throw new Error('KGM bülteni alınamadı: ' + y.status);
   return bultenCoz(await y.text());
 }
+
+// ---- Trafiğe kapalı yollar (resmî KGM uygulaması) ------------------------------------------
+// yol.kgm.gov.tr/kapaliyollar arayüzünün kullandığı anahtarsız JSON. Bültenin aksine her kayıt
+// koordinat kutusu (extent: [boylamMin, enlemMin, boylamMax, enlemMax]) taşır; eşleme kesindir.
+// Sıra 21.09.2026 yanıtında Cide–İnebolu (33,30°D 42,01°K) kaydıyla doğrulandı.
+export const KGM_KAPALI = 'https://yol.kgm.gov.tr/kapaliyollar/api/workings/search';
+
+export function kapaliCoz(yanit) {
+  const d = Array.isArray(yanit) ? yanit : yanit?.data;
+  if (!Array.isArray(d)) return [];
+  return d.filter(x => Array.isArray(x.extent) && x.extent.length === 4 && x.extent.every(Number.isFinite)).map(x => ({
+    id: x.id, neden: x.reason || 'Belirtilmemiş', yolNo: x.roadNo || '', ad: (x.shortDescription || x.explanation || '').replace(/\s+/g, ' ').trim(),
+    kmAralik: [x.startKm, x.endKm], kis: x.winterProgram || '', guncelleme: (x.updateTime || '').slice(0, 10),
+    kutu: { b0: x.extent[0], e0: x.extent[1], b1: x.extent[2], e1: x.extent[3] },
+  }));
+}
+
+// Rota şeklinin herhangi bir noktası kutunun (payla genişletilmiş) içindeyse kayıt rotadadır.
+// payKm: kutu yolun yalnızca kapalı kesimini sarar ve çok dar olabilir; GPS/harita kayması için pay.
+export function rotadakiKapali(kayitlar, sekil, { payKm = 0.3 } = {}) {
+  if (!kayitlar?.length || !sekil?.length) return [];
+  const kum = [0];
+  for (let i = 1; i < sekil.length; i++) kum.push(kum[i - 1] + mesafeKm(sekil[i - 1], sekil[i]));
+  const sonuc = [];
+  for (const k of kayitlar) {
+    const pe = payKm / 111, pb = payKm / (111 * Math.cos((k.kutu.e0 + k.kutu.e1) / 2 * Math.PI / 180));
+    let ilk = -1, son = -1;
+    for (let i = 0; i < sekil.length; i++) {
+      const [e, b] = sekil[i];
+      if (e >= k.kutu.e0 - pe && e <= k.kutu.e1 + pe && b >= k.kutu.b0 - pb && b <= k.kutu.b1 + pb) { if (ilk < 0) ilk = i; son = i; }
+    }
+    if (ilk >= 0) sonuc.push({ ...k, rotaKm: [+kum[ilk].toFixed(1), +kum[son].toFixed(1)] });
+  }
+  return sonuc.sort((a, b) => a.rotaKm[0] - b.rotaKm[0]);
+}
+
+export async function kapaliGetir(getir = fetch) {
+  const y = await getir(KGM_KAPALI, { headers: { Accept: 'application/json' } });
+  if (!y.ok) throw new Error('KGM kapalı yol servisi yanıt vermedi: ' + y.status);
+  return kapaliCoz(await y.json());
+}

@@ -77,3 +77,14 @@ test('ters yönlü ya da küçük sapmada düzeltme yok', () => {
   assert.equal(sapmaDuzeltmesi([{ fark: 1 }, { fark: 1.5 }]), null);
   assert.equal(sapmaDuzeltmesi([{ fark: -4 }]), null);
 });
+
+test('gözlem sınaması rakım farkını sapma saymaz', () => {
+  const saat = [Date.UTC(2026, 8, 21, 6), Date.UTC(2026, 8, 21, 7)];
+  // Model hücresi 1.400 m, havalimanı 1.050 m: 350 m × 6,5 °C/km ≈ 2,3 °C daha ılık olması beklenir.
+  const bb = [{ km: 0, enlem: 38.77, boylam: 35.49, rakim: 1400, saat, T: [15, 16] }];
+  const [s] = gozlemSinama(bb, [{ icao: 'LTAU', ad: 'Kayseri', enlem: 38.77, boylam: 35.50, rakim: 1050, zaman: saat[0], T: 17.3 }]);
+  assert.equal(s.rakimFarkiM, 350);
+  assert.ok(Math.abs(s.fark) < 0.1, String(s.fark));        // düzeltmesiz +2,3 °C sapma görünürdü
+  const [d] = gozlemSinama([{ ...bb[0], rakim: null }], [{ icao: 'X', ad: 'x', enlem: 38.77, boylam: 35.50, rakim: 1050, zaman: saat[0], T: 17.3 }]);
+  assert.equal(d.fark, 2.3);                                  // rakım bilinmiyorsa eski davranış
+});

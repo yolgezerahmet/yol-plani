@@ -35,7 +35,7 @@ export function topluCozumle(yanit, noktalar, modeller = MODELLER) {
       }
       if (dolu) m[md] = o;
     }
-    return { km: noktalar[i]?.km ?? 0, enlem: y.latitude, boylam: y.longitude,
+    return { km: noktalar[i]?.km ?? 0, enlem: y.latitude, boylam: y.longitude, rakim: y.elevation ?? null,
              saat: h.time.map(t => Date.parse(t.length === 16 ? t + ':00' : t)), modeller: m };
   });
 }
@@ -48,7 +48,7 @@ const aralik = a => { const s = a.filter(v => v != null); return s.length ? Math
 // 350° ve 10° diyen iki model 180° değil 0° verir. Yanında saat saat açılma (sıcaklık, rüzgâr) durur.
 export function birlestir(nokta) {
   const md = Object.values(nokta.modeller);
-  const n = nokta.saat.length, r = { km: nokta.km, enlem: nokta.enlem, boylam: nokta.boylam, saat: nokta.saat,
+  const n = nokta.saat.length, r = { km: nokta.km, enlem: nokta.enlem, boylam: nokta.boylam, rakim: nokta.rakim ?? null, saat: nokta.saat,
     T: [], nem: [], basincHpa: [], ruzgarMs: [], ruzgarYonu: [], yagisMm: [], karCm: [], gunesWm2: [], acilmaT: [], acilmaRuzgar: [], modelSayisi: md.length };
   for (let i = 0; i < n; i++) {
     const al = k => md.map(m => m[k]?.[i]);
@@ -97,7 +97,7 @@ export function metarCozumle(liste) {
   const son = new Map();
   for (const m of liste || []) {
     if (m.temp == null || m.lat == null) continue;
-    const o = { icao: m.icaoId, ad: m.name || m.icaoId, enlem: m.lat, boylam: m.lon, zaman: m.obsTime * 1000,
+    const o = { icao: m.icaoId, ad: m.name || m.icaoId, enlem: m.lat, boylam: m.lon, rakim: m.elev ?? null, zaman: m.obsTime * 1000,
       T: m.temp, ruzgarMs: m.wspd != null ? +(m.wspd * 0.5144).toFixed(1) : null, ruzgarYonu: typeof m.wdir === 'number' ? m.wdir : null };
     if (!son.has(o.icao) || son.get(o.icao).zaman < o.zaman) son.set(o.icao, o);
   }
@@ -106,6 +106,7 @@ export function metarCozumle(liste) {
 
 // Her gözlemi rotadaki en yakın tahmin noktasıyla karşılaştırır (≤ 50 km).
 // Rakım farkı için standart düşüş oranı (6,5 °C/km) düzeltmesi uygulanır.
+export const DUSUS_ORANI = 0.0065;   // °C/m
 export function gozlemSinama(birlesik, gozlemler, { enFazlaKm = 50 } = {}) {
   const sonuc = [];
   for (const g of gozlemler) {
@@ -114,10 +115,13 @@ export function gozlemSinama(birlesik, gozlemler, { enFazlaKm = 50 } = {}) {
     if (!en || d > enFazlaKm) continue;
     let i = 0; while (i + 1 < en.saat.length && en.saat[i + 1] <= g.zaman) i++;
     if (Math.abs(en.saat[i] - g.zaman) > 90 * 60e3) continue;
-    const tahmin = en.T[i];
-    if (tahmin == null) continue;
+    if (en.T[i] == null) continue;
+    // Tahmin, model hücresinin rakımı içindir; havalimanı daha alçak ya da yüksekteyse standart
+    // düşüş oranıyla (6,5 °C/km) istasyon rakımına taşınır. Yoksa rakım farkı sapma sanılır.
+    const dh = en.rakim != null && g.rakim != null ? en.rakim - g.rakim : 0;
+    const tahmin = en.T[i] + DUSUS_ORANI * dh;
     sonuc.push({ icao: g.icao, ad: g.ad, km: en.km, uzaklikKm: Math.round(d), olculen: g.T, tahmin: +tahmin.toFixed(1),
-                 fark: +(g.T - tahmin).toFixed(1) });
+                 fark: +(g.T - tahmin).toFixed(1), rakimFarkiM: Math.round(dh) });
   }
   return sonuc;
 }
