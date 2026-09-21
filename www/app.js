@@ -26,6 +26,7 @@ import { enerjiAyristir, ayristirmaCumlesi } from './core/ayristir.js';
 import { v2lSure, CIHAZLAR, V2L_SINIR_KW } from './core/v2l.js';
 import { googleRota, wazeHedef } from './core/nav.js';
 import { canliBaslat } from './canli-ekran.js';
+import { gpxUret } from './core/gpx.js';
 
 const $ = id => document.getElementById(id);
 const sayi = (x, b = 0) => Number(x).toLocaleString('tr-TR', { maximumFractionDigits: b, minimumFractionDigits: b });
@@ -337,6 +338,22 @@ function ciz() {
       yeniPlan: y => { s.plan = { ...y, termal: y.termal ?? s.plan.termal }; },
       buradanPlanla: k => { durum.nereden = { ad: 'Bulunduğum yer', lat: k.lat, lon: k.lon }; $('nereden').value = durum.nereden.ad; $('planla').click(); },
     });
+  };
+
+  // OsmAnd ve diğer GPX okuyan navigasyonlar: plan dosya olarak paylaşılır.
+  $('gpxPaylas').onclick = async () => {
+    const gpx = gpxUret({ bas: durum.nereden, son: durum.nereye, sekil: s.rota.sekil, plan: p,
+      ad: `${durum.nereden.ad.split(',')[0]} – ${durum.nereye.ad.split(',')[0]}` });
+    const dosya = 'yol-plani.gpx', C = window.Capacitor?.Plugins;
+    try {
+      if (window.Capacitor?.isNativePlatform?.() && C?.Filesystem && C?.Share) {
+        const r = await C.Filesystem.writeFile({ path: dosya, data: gpx, directory: 'CACHE', encoding: 'utf8' });
+        await C.Share.share({ title: 'Yol Planı rotası', files: [r.uri], dialogTitle: 'Rotayı aç: OsmAnd seç' });
+      } else {
+        const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([gpx], { type: 'application/gpx+xml' })), download: dosya });
+        document.body.appendChild(a); a.click(); a.remove();
+      }
+    } catch (e) { if (!/cancel/i.test(String(e?.message))) alert('Paylaşılamadı: ' + e.message); }
   };
 
   $('durakBaslik').hidden = !n;

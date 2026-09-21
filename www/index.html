@@ -74,7 +74,9 @@ dl.degerler dt { color: var(--soluk); } dl.degerler dd { margin: 0; font: 600 15
 .ikincil:disabled { opacity: .45; }
 pre.ham { font-size: 11px; max-height: 160px; overflow: auto; background: var(--kagit); border-radius: 8px; padding: 8px; white-space: pre-wrap; }
 .kucuk { font-size: 13px; color: var(--soluk); }
-.yola { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin: 18px 0 4px; }
+.yola { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 18px 0 4px; }
+.yola .planla { grid-column: 1 / -1; }
+.yola button { text-align: center; line-height: 1.15; min-height: 52px; }
 .yola a { text-align: center; line-height: 1.15; display: flex; align-items: center; justify-content: center; text-decoration: none; min-height: 52px; }
 label.satir { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; color: var(--murekkep); }
 label.satir input { width: 7.5em; text-align: right; }
@@ -216,7 +218,8 @@ dialog output { float: right; font: 600 18px var(--sayi); color: var(--murekkep)
     <p class="ozet" id="ozet"></p>
     <div class="yola">
       <a class="planla" id="yolaCik" target="_blank" rel="noopener">Google Haritalar'da yola çık</a>
-      <a class="ikincil" id="wazeIlk" target="_blank" rel="noopener" aria-label="İlk durağa Waze ile git">Waze<br>1. durak</a>
+      <a class="ikincil" id="wazeIlk" target="_blank" rel="noopener" aria-label="İlk durağa Waze ile git">Waze ile 1. durağa</a>
+      <button class="ikincil" id="gpxPaylas" type="button">OsmAnd'e gönder (GPX)</button>
     </div>
     <p class="kucuk" id="yolaCikNot"></p>
     <button class="ikincil" id="canliBaslat" type="button" style="width:100%;min-height:48px;margin-top:8px">Yolda modunu başlat: canlı takip ve sesli uyarı</button>

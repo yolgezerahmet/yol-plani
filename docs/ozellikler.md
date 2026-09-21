@@ -193,3 +193,10 @@ OBD panelinde. `core/karne.js`; günlükler `karne:saglik` ve `karne:sarj` (yaln
   Geotab filo verisiyle (ortalama %2,3/yıl; yavaş şarj %1,5; yoğun 100 kW+ DC %3,0) yan yana gösterilir.
 - Hızlı şarj payı: kaydedilen DC enerjisi / BMS sayacındaki toplam şarj; kaydedilmeyen oturum olabileceği için "en az".
 - "Karneyi kopyala" düz metin verir.
+
+## OsmAnd'e gönder (Eylül 2026)
+OsmAnd'de EV planlaması yok (yalnız CO₂ için "elektrik" yakıt türü). Plan `core/gpx.js` ile GPX'e çevrilir ve
+paylaşım menüsünden OsmAnd'e verilir: şarj durakları ara nokta (adında varış→hedef % ve süre, açıklamada kW,
+kWh, ön ısıtma km'si, yedek), ön ısıtma başlangıç noktası ayrı işaret, `<rte>` ara noktalı rota (OsmAnd yeniden
+hesaplar), `<trk>` tam iz ("izle" için). Tarayıcıda indirme olarak çalışır. Sıradaki: OsmAnd AIDL ile canlı
+widget ("sıradaki durağa %24") ve istasyon katmanı.
