@@ -76,6 +76,6 @@ test('bölüm hesabı tırmanış ve geri kazanımı ayrı raporlar', () => {
 });
 test('rüzgâr vektörü yol yönüne göre işler', () => {
   const k = { ...deniz, ruzgarHizi: 12, ruzgarYonu: 0 };
-  const karsi = whKm('otoyol', 110, k, 0), arkadan = whKm('otoyol', 110, k, 180);
+  const karsi = whKm('otoyol', 110, k, { yolYonu: 0 }), arkadan = whKm('otoyol', 110, k, { yolYonu: 180 });
   assert.ok(karsi > arkadan * 1.15);
 });

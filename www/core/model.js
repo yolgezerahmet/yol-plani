@@ -19,56 +19,59 @@ export const VARSAYILAN = {
 const G = SABIT.g;
 
 // Bölümün hava yoğunluğu: ölçülen basınç ve nem varsa onlar, yoksa rakımdan tahmin.
-function yogunluk(k) {
-  const p = k.basincPa || basincTahmini(k.rakim, k.T);
+function yogunluk(k, rakim) {
+  const r = rakim ?? k.rakim;
+  const p = k.basincPa && rakim == null ? k.basincPa : basincTahmini(r, k.T);
   return ro(k.T, p, k.nem ?? 50);
 }
 
 // Düz yolda Wh/km. hiz km/h; k koşullar ve araç parametreleri.
 // k.ruzgarHizi (m/s, 10 m) + k.ruzgarYonu + b.yolYonu varsa rüzgâr vektörel çözülür;
 // yoksa eski tek sayılı k.ruzgar (km/h, karşıdan +) kullanılır.
-export function whKm(tip, hiz, k, yolYonu = null) {
+// b: bölüm parametreleri (rota motorundan) ya da {} — yolYonu, rakim, crrKat, ruzgarKat, akisOrani.
+export function whKm(tip, hiz, k, b = {}) {
   const t = TIP[tip], h = Math.max(5, hiz);
-  const vekt = k.ruzgarHizi != null && yolYonu != null
-    ? ruzgarBilesenleri(k.ruzgarHizi, k.ruzgarYonu ?? 0, yolYonu)
-    : { karsi: (k.ruzgar || 0) / 3.6, yan: 0 };
+  const ruzgarKat = b.ruzgarKat ?? 1;
+  const vekt = k.ruzgarHizi != null && b.yolYonu != null
+    ? ruzgarBilesenleri(k.ruzgarHizi * ruzgarKat, k.ruzgarYonu ?? 0, b.yolYonu)
+    : { karsi: (k.ruzgar || 0) / 3.6 * ruzgarKat, yan: 0 };
   const a = akisDirenci(h, vekt.karsi, vekt.yan, k.cda);
-  const Fa = yogunluk(k) * a.kuvvet;
-  const crr = k.crr * k.lastik * (1 + 0.003 * Math.max(0, 20 - k.T)) * (k.yagis ? 1.15 : 1);
+  const Fa = yogunluk(k, b.rakim) * a.kuvvet;
+  const crr = k.crr * k.lastik * (b.crrKat ?? 1) * (1 + 0.003 * Math.max(0, 20 - k.T)) * (k.yagis ? 1.15 : 1);
   const Fr = crr * (k.bos + k.yuk) * G;
-  return (Fa + Fr) / 3.6 / k.verim * t.f + yardimciKw(k.T) * 1000 / (h * t.akis);
+  return (Fa + Fr) / 3.6 / k.verim * t.f + yardimciKw(k.T) * 1000 / (h * (b.akisOrani ?? t.akis));
 }
 
+// Bir bölümün enerjisi (kWh), ortalama Wh/km ve süresi (dk). b: {tip, km, dh}
 // Rota motoru bölüm için akisOrani (Valhalla ölçülü) ve tırmanış/iniş verdiyse onlar kullanılır;
 // elle girilen bölümlerde yol tipinin varsayılanı ve net rakım farkı geçerlidir.
-// soc: bölüm başındaki şarj; inişte bataryanın rejenerasyonu kabul sınırını belirler.
 export function bolumHesap(b, hiz, k, soc = 50) {
   const m = k.bos + k.yuk;
   const cikis = b.cikis != null ? b.cikis : Math.max(0, b.dh || 0);
   const inis = b.inis != null ? b.inis : Math.max(0, -(b.dh || 0));
   const tirmanis = m * G * cikis / 3.6e6 / k.verim;                      // kWh, harcanan
   const geri = inisGeriKazanim(inis, m, b.km, hiz, soc, k.T);            // kWh, kazanılan
-  const kwh = whKm(b.tip, hiz, k, b.yolYonu) * b.km / 1000 + tirmanis - geri.kwh + (b.gecisKayipKwh || 0);
+  const kwh = whKm(b.tip, hiz, k, b) * b.km / 1000 + tirmanis - geri.kwh + (b.gecisKayipKwh || 0);
   const akis = b.akisOrani || TIP[b.tip].akis;
   return {
-    wh: b.km > 0 ? kwh / b.km * 1000 : 0, kwh, dk: b.km / (Math.max(5, hiz) * akis) * 60,
+    wh: b.km > 0 ? kwh / b.km * 1000 : 0, kwh,
+    dk: b.km / (Math.max(5, hiz) * akis) * 60 + (b.olayDk || 0),
     tirmanisKwh: +tirmanis.toFixed(2), geriKazanimKwh: +geri.kwh.toFixed(2),
     kisilanKwh: +geri.kisilanKwh.toFixed(2),
   };
 }
 
-// Referans eğri: 63 kWh E-GMP, 800 V istasyon; diğer bataryalar sarjOlcek ile ölçeklenir (bkz. arac.js).
-// Ölçülen %10→80: 350 kW'ta 18 dk, 150 kW'ta 22 dk, 50 kW'ta 53 dk.
+// Referans eğri: 63 kWh E-GMP, 800 V istasyon; diğer bataryalar sarjOlcek ile ölçeklenir (bkz. arac.js). Ölçülen %10→80: 350 kW'ta 18 dk, 150 kW'ta 22 dk, 50 kW'ta 53 dk.
 const EGRI = [[0, 110], [5, 150], [10, 165], [45, 175], [55, 145], [70, 125], [78, 95], [82, 55], [90, 32], [100, 8]];
+export function sarjGucu(soc, olcek = 1) {
+  return olcek * temelGuc(soc);
+}
 function temelGuc(soc) {
   for (let i = 1; i < EGRI.length; i++) {
     const [a, pa] = EGRI[i - 1], [c, pc] = EGRI[i];
     if (soc <= c) return pa + (pc - pa) * (soc - a) / (c - a);
   }
   return 8;
-}
-export function sarjGucu(soc, olcek = 1) {
-  return olcek * temelGuc(soc);
 }
 export function sarjDk(s0, s1, istasyonKw, kap, olcek = 1) {
   let saat = 0;
