@@ -5,7 +5,7 @@ import { havaGetir, havaUygula, ornekNoktalari } from './core/hava.js';
 import { cokluHavaGetir, modelNoktasi, belirsizlik, MODEL_AD } from './core/hava-coklu.js';
 import { durakPlanla, enerjiEgrisi } from './core/plan.js';
 import { bultenGetir, yerSozlugu, rotadakiKayitlar, kapaliGetir, rotadakiKapali } from './core/kgm.js';
-import { KULLANIM_VARSAYILAN, TAVAN, LASTIK, KLIMA, kullanimUygula, kabinGecisKwh, yolculukKapasiteKat } from './core/kullanim.js';
+import { KULLANIM_VARSAYILAN, TAVAN, LASTIK, KLIMA, CEKILEN, BASINC, basincCrrKat, kullanimUygula, kabinGecisKwh, yolculukKapasiteKat } from './core/kullanim.js';
 import { rotadakiDenetim } from './core/denetim.js';
 
 // KGM bülteni günde bir yayımlanıyor; bir saatlik önbellek yeter.
@@ -243,6 +243,11 @@ function ciz() {
   if (et.kabinKwh >= 0.3) ek.push(`kabini hedef sıcaklığa getirmek ilk dakikalarda ${sayi(et.kabinKwh, 1)} kWh alıyor (araç şarjdayken ön klimalandırma bunu sıfırlar)`);
   if (et.kapKat < 0.995) ek.push(`soğuk batarya kullanılabilir kapasiteyi yaklaşık %${sayi((1 - et.kapKat) * 100, 1)} azaltıyor`);
   if (s.kul?.tavan && s.kul.tavan !== 'yok') ek.push(`${TAVAN[s.kul.tavan].ad.toLocaleLowerCase('tr-TR')} hava direncini %${Math.round((TAVAN[s.kul.tavan].cda - 1) * 100)} artırıyor`);
+  if (s.kul?.cekilen && s.kul.cekilen !== 'yok') ek.push(`${CEKILEN[s.kul.cekilen].ad.toLocaleLowerCase('tr-TR')} kütleyi ${sayi(CEKILEN[s.kul.cekilen].kg)} kg, hava direncini %${Math.round((CEKILEN[s.kul.cekilen].cda - 1) * 100)} artırıyor (kaba tahmin; ilk yolculukta tüketimi izle)`);
+  if (s.kul?.basinc && s.kul.basinc !== 'tam') ek.push(`düşük lastik basıncı yuvarlanma direncini %${sayi((basincCrrKat(BASINC[s.kul.basinc].bar) - 1) * 100)} artırıyor`);
+  const yukKwh = s.plan.enerji.satir.reduce((t, r) => t + (r.yukKayipKwh || 0), 0);
+  if (yukKwh >= 0.5) ek.push(`uzun tırmanışlardaki yüksek güç ${sayi(yukKwh, 1)} kWh ek kayıp getiriyor`);
+  if (s.bolumler.some(b => b.T > 32)) ek.push('sıcak kesimlerde batarya soğutması da enerji çekiyor');
   if (s.bolumler.some(b => b.kar)) ek.push('rotanın bir kısmında kar yağışı bekleniyor; karlı zemin tüketimi artırır, hızın da düşeceğini hesaba kat');
   if (ek.length) u.push(`<p class="bilgi">Kullanım etkileri: ${ek.join('; ')}.</p>`);
   const dl = s.denetim?.liste || [];
@@ -372,12 +377,13 @@ function profilSvg(s) {
 const sec = (id, tablo, deger) => { $(id).innerHTML = Object.entries(tablo).map(([v, o]) => `<option value="${v}">${kacis(o.ad)}</option>`).join(''); $(id).value = deger; };
 function kullanimOku() {
   const u = { kisi: +$('kisi').value || 1, bagajKg: +$('bagaj').value || 0, tavan: $('tavan').value, lastik: $('lastik').value,
-              klima: $('klima').value, kabinC: +$('kabinC').value || 22, sebekeOnKlima: $('sebekeOnKlima').checked };
+              klima: $('klima').value, kabinC: +$('kabinC').value || 22, sebekeOnKlima: $('sebekeOnKlima').checked,
+              cekilen: $('cekilen').value, basinc: $('basinc').value, acikCam: $('acikCam').checked };
   depo.koy('kullanim', u); return u;
 }
 {
   const u = { ...KULLANIM_VARSAYILAN, ...depo.al('kullanim', {}) };
-  sec('tavan', TAVAN, u.tavan); sec('lastik', LASTIK, u.lastik); sec('klima', KLIMA, u.klima);
+  sec('tavan', TAVAN, u.tavan); sec('lastik', LASTIK, u.lastik); sec('klima', KLIMA, u.klima); sec('cekilen', CEKILEN, u.cekilen); sec('basinc', BASINC, u.basinc); $('acikCam').checked = u.acikCam;
   $('kisi').value = u.kisi; $('bagaj').value = u.bagajKg; $('kabinC').value = u.kabinC; $('sebekeOnKlima').checked = u.sebekeOnKlima;
 }
 $('garaj').value = depo.al('garaj', '');

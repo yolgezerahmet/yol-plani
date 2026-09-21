@@ -9,14 +9,17 @@ Katsayı kaynağı: [Ö] ölçüm/standart, [L] literatür, [T] tahmin.
 | Hava direnci: hız², hava yoğunluğu (sıcaklık, basınç, nem, rakım) | M | fizik.js, model.js |
 | Rüzgâr: karşı/yan bileşen, yan rüzgârda CdA artışı | M [T] | fizik.js |
 | Tavan kutusu, bisiklet, taşıyıcı (CdA +%6…30) | M [L] | kullanim.js |
-| Açık cam, römork | – | |
+| Açık cam (CdA +%5), römork ve karavan (kütle + CdA) | M [L/T] | kullanim.js |
 | Yuvarlanma direnci: kütle, yol yüzeyi (OSM), soğuk lastik | M | model.js, rota.js |
 | Lastik türü (yaz, dört mevsim, kış) | M [L] | kullanim.js |
-| Lastik basıncı (soğukta düşer; TPMS 7A0/22C00B okunacak) | – | |
-| Islak yol (+%15), karlı zemin (+%35) | Y [T] | model.js |
+| Lastik basıncı: kullanıcı seçimi, Crr ∝ p^-0,4; TPMS (7A0/22C00B) okunacak | M [L] | kullanim.js |
+| Islak yol: yağış şiddetine göre kademeli (+%6/12/20); karlı zemin (+%35) | M [L/T] | fizik.js |
 | Tırmanış ve iniş; rejenerasyon verimi, soğukta ve dolu bataryada kısılma | M [T] | fizik.js |
 | Yük: kişi sayısı, bagaj | M | kullanim.js |
-| Aktarma verimi sabit (0,90 RWD / 0,88 AWD); hıza ve yüke bağlı harita | Y, K | arac.js |
+| Aktarma verimi: referans güçte sabit (0,90/0,88), üstünde yüke bağlı ek kayıp (I²R) | M [T], K | fizik.js |
+| Düşük yükte (şehir içi sürünme) motor verimi | Y (şehir katsayısı içinde) | model.js |
+| Rüzgâr hamlesi / türbülans | değerlendirildi: araç yüksekliğinde σ² ≪ v², etki < %0,5; eklenmedi | |
+| Öndeki aracın rüzgâr gölgesi (yoğun trafikte −%3…8) | – (trafik verisi yok), K | |
 | Dur-kalk, hız dalgalanması | Y (yol tipi katsayısı) | model.js |
 | Sürüş modu, i-Pedal, sürücü tarzı | K (tüketim katsayısı) | kalibrasyon.js |
 
@@ -31,8 +34,8 @@ Katsayı kaynağı: [Ö] ölçüm/standart, [L] literatür, [T] tahmin.
 | Şarj öncesi batarya ön ısıtması: enerji ve kazanılan süre | M [T] | plan.js |
 | Soğuk hücrede şarj gücü | M, K | termal.js, kalibrasyon.js |
 | Soğuk hücrede kullanılabilir kapasite | Y [L] | kullanim.js |
-| Sıcakta batarya soğutması (kompresör yükü) | – | |
-| Cam rezistansı, koltuk/direksiyon ısıtma, farlar | Y (0,5 kW sabit yük içinde) | fizik.js |
+| Sıcakta batarya soğutması (30 °C üstü, en çok 0,8 kW) | M [T] | fizik.js |
+| Farlar (gece), silecek + arka cam rezistansı (yağış), ısıtmalı yüzeyler (< 3 °C) | M [T] | fizik.js |
 
 ## Batarya ve şarj
 | Süreç | Durum |
@@ -40,7 +43,7 @@ Katsayı kaynağı: [Ö] ölçüm/standart, [L] literatür, [T] tahmin.
 | Kullanılabilir kapasite, sağlık (SoH) | M, K |
 | Şarj eğrisi (SoC'ye göre), istasyon gücü, %80 sonrası yavaşlama | M |
 | Şarj kaybı (sayaç → batarya) | Y (yalnız maliyette) |
-| Beklemede tüketim (park, mola, 12 V) | – |
+| Beklemede tüketim: şarj durağında şebekeden karşılanır; şarjsız mola planda yok | – (düşük etki) |
 | Gösterge SoC ile BMS SoC farkı, alt tampon | – (OBD çıktısıyla) |
 
 ## Dış koşullar ve veri
@@ -54,7 +57,8 @@ Katsayı kaynağı: [Ö] ölçüm/standart, [L] literatür, [T] tahmin.
 | Bayram/tatil yoğunluğu | – |
 
 ## Sıradaki adaylar (etki büyüklüğüne göre)
-1. Hıza ve yüke bağlı aktarma verimi (OBD güç ve hız kaydından çıkarılabilir).
-2. Lastik basıncı ve dış sıcaklığın OBD'den okunması.
-3. Sıcak havada batarya soğutma yükü.
-4. Beklemede tüketim.
+1. OBD güç ve hız kaydından gerçek verim haritası (yüke bağlı kayıp katsayısının ölçülmesi).
+2. Lastik basıncı ve dış sıcaklığın OBD'den okunması (seçim yerine ölçüm).
+3. Bayram ve tatil yoğunluğu: süre ve istasyonda sıra beklentisi.
+4. Gösterge SoC ile BMS SoC farkı ve alt tampon (ilk OBD çıktısıyla).
+5. Hızlı şarj sonrası yükselen batarya soğutma yükü.

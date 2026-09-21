@@ -116,3 +116,32 @@ export function inisGeriKazanim(inisM, kutle, km, hizKmh, soc, T) {
   const kwh = potansiyel * rejenVerimi(T) * oran;
   return { kwh, kisilanKwh: potansiyel * (1 - oran), ortGucKw, kabulKw: kabul };
 }
+
+// ---- Küçük ama sürekli yükler ve yüke bağlı kayıplar -------------------------------------
+// Aksesuar yükü (kW), sabit 0,5 kW'ın ÜSTÜNE: gece farlar, yağışta silecek + arka cam rezistansı,
+// donma yakınında ayna/ön cam/koltuk/direksiyon ısıtması. Değerler [T]; OBD 12 V akımıyla düzeltilir.
+export function aksesuarKw({ gece = false, yagis = false, T = 20 } = {}) {
+  return (gece ? 0.12 : 0) + (yagis ? 0.25 : 0) + (T < 3 ? 0.20 : 0);
+}
+
+// Sıcak havada batarya soğutması: kompresör bataryayı da soğutur. 30 °C altında yok,
+// 42 °C'de ~0,8 kW [T]. Hızlı şarj sonrası ilk yarım saatte daha yüksek olabilir (modelde yok).
+export function bataryaSogutmaKw(T) {
+  return T <= 30 ? 0 : Math.min(0.8, (T - 30) / 12 * 0.8);
+}
+
+// Yağış şiddetine göre yuvarlanma direnci çarpanı [L/T]: su filmi ve sıçratma. mm/saat.
+// Eski ikili değer (+%15) orta şiddete denk gelir; mm bilinmiyorsa o kullanılır.
+export function yagisCrrKat(mm) {
+  if (mm == null) return 1.15;
+  if (mm < 0.1) return 1;
+  return mm < 1 ? 1.06 : mm < 4 ? 1.12 : 1.20;
+}
+
+// Yüke bağlı ek kayıp: motor bakır kaybı ve batarya iç direnci akımın karesiyle büyür.
+// Referans güçte (düz otoyol seyri, ~25 kW) sabit verim geçerlidir; üstünde kayıp oranı artar.
+// 60 kW sürekli tırmanışta ≈ %1,7, tavan %6 [T]. OBD güç/hız kaydından ölçülecek.
+export const YUK_REF_KW = 25;
+export function yukKayipKat(ortKw) {
+  return ortKw <= YUK_REF_KW ? 1 : Math.min(1.06, 1 + 0.012 * (ortKw / YUK_REF_KW - 1));
+}

@@ -2,7 +2,7 @@
 // Fiziksel alt katman fizik.js'te; buradaki işlevler onu bölüm ölçeğine uygular.
 // Kalibrasyon hedefleri (EV Database, IONIQ 5 63 kWh RWD): 110 km/h 20 °C ≈ 190 Wh/km, −10 °C ≈ 245 Wh/km.
 import { sicaklikKatsayisi, direncIsisi, ilerlet, TERMAL } from './termal.js';
-import { SABIT, havaYogunlugu as ro, basincTahmini, akisDirenci, ruzgarBilesenleri, yardimciKw, iklimKw, inisGeriKazanim } from './fizik.js';
+import { SABIT, havaYogunlugu as ro, basincTahmini, akisDirenci, ruzgarBilesenleri, yardimciKw, iklimKw, inisGeriKazanim, aksesuarKw, bataryaSogutmaKw, yagisCrrKat, yukKayipKat } from './fizik.js';
 
 export const TIP = {
   otoyol:   { ad: 'Otoyol',               f: 1.00, akis: 0.97, limit: 130, hiz: 115, renk: '--otoyol' },
@@ -39,9 +39,11 @@ export function whKm(tip, hiz, k, b = {}) {
   const a = akisDirenci(h, vekt.karsi, vekt.yan, k.cda);
   const Fa = yogunluk(k, b.rakim) * a.kuvvet;
   // Karlı/sulu karlı zeminde yuvarlanma direnci ıslak yoldan belirgin yüksek [T]; kar yağışı varsa o geçerli.
-  const crr = k.crr * k.lastik * (b.crrKat ?? 1) * (1 + 0.003 * Math.max(0, 20 - k.T)) * (k.kar ? 1.35 : k.yagis ? 1.15 : 1);
+  const crr = k.crr * k.lastik * (b.crrKat ?? 1) * (1 + 0.003 * Math.max(0, 20 - k.T)) * (k.kar ? 1.35 : k.yagis ? yagisCrrKat(k.yagisMm) : 1);
   const Fr = crr * (k.bos + k.yuk) * G;
-  const yardimci = SABIT.temelKw + (k.ekYukKw || 0) + iklimKw(k.T, { kabin: k.kabinC ?? SABIT.kabinC, gunes: k.gunes ?? null }) * (k.klimaKat ?? 1);
+  // Gece: hava servisi ışınımı 0 veriyorsa. Ölçü yoksa (elle senaryo) gündüz sayılır.
+  const aks = aksesuarKw({ gece: k.gunes === 0, yagis: !!(k.yagis || k.kar), T: k.T }) + bataryaSogutmaKw(k.T);
+  const yardimci = SABIT.temelKw + (k.ekYukKw || 0) + aks + iklimKw(k.T, { kabin: k.kabinC ?? SABIT.kabinC, gunes: k.gunes ?? null }) * (k.klimaKat ?? 1);
   return (Fa + Fr) / 3.6 / k.verim * t.f + yardimci * 1000 / (h * (b.akisOrani ?? t.akis));
 }
 
@@ -54,13 +56,17 @@ export function bolumHesap(b, hiz, k, soc = 50) {
   const inis = b.inis != null ? b.inis : Math.max(0, -(b.dh || 0));
   const tirmanis = m * G * cikis / 3.6e6 / k.verim;                      // kWh, harcanan
   const geri = inisGeriKazanim(inis, m, b.km, hiz, soc, k.T);            // kWh, kazanılan
-  const kwh = whKm(b.tip, hiz, k, b) * b.km / 1000 + tirmanis - geri.kwh + (b.gecisKayipKwh || 0);
   const akis = b.akisOrani || TIP[b.tip].akis;
+  const cekis = whKm(b.tip, hiz, k, b) * b.km / 1000 + tirmanis;
+  // Bölümün ortalama çekiş gücü yüksekse (uzun tırmanış, yüksek hız, römork) kayıp oranı büyür.
+  const saat = b.km / (Math.max(5, hiz) * akis);
+  const yukEk = saat > 0 ? cekis * (yukKayipKat(cekis / saat) - 1) : 0;
+  const kwh = cekis + yukEk - geri.kwh + (b.gecisKayipKwh || 0);
   return {
     wh: b.km > 0 ? kwh / b.km * 1000 : 0, kwh,
     dk: b.km / (Math.max(5, hiz) * akis) * 60 + (b.olayDk || 0),
     tirmanisKwh: +tirmanis.toFixed(2), geriKazanimKwh: +geri.kwh.toFixed(2),
-    kisilanKwh: +geri.kisilanKwh.toFixed(2),
+    kisilanKwh: +geri.kisilanKwh.toFixed(2), yukKayipKwh: +yukEk.toFixed(2),
   };
 }
 

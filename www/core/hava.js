@@ -93,7 +93,7 @@ export function havaUygula(bolumler, noktalar, cikisMs, sureFn, gecis = 2) {
       const orta = b.basKm + b.km / 2;
       const hava = anlikHava(yakinNokta(noktalar, orta), t + sureFn(b, i) * 30000); // bölüm ortası
       t += sureFn(b, i) * 60000 + (b.durak?.dk || 0) * 60000;
-      return hava ? { ...b, ...hava, yagis: hava.yagis > 0.1, kar: hava.karCm > 0.05 } : b;
+      return hava ? { ...b, ...hava, yagisMm: hava.yagis, yagis: hava.yagis > 0.1, kar: hava.karCm > 0.05 } : b;
     });
   }
   return sonuc;

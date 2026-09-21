@@ -50,3 +50,42 @@ test('kar, ıslak yoldan daha çok tüketir', () => {
   const s = { ...K, T: -2 };
   assert.ok(whKm('bolunmus', 90, { ...s, kar: true }) > whKm('bolunmus', 90, { ...s, yagis: true }) * 1.05);
 });
+
+import { CEKILEN, basincCrrKat } from '../www/core/kullanim.js';
+import { aksesuarKw, bataryaSogutmaKw, yagisCrrKat, yukKayipKat } from '../www/core/fizik.js';
+import { whKm as _wh, bolumHesap as _bh, VARSAYILAN as _V } from '../www/core/model.js';
+
+test('römork kütleyi ve hava direncini birlikte büyütür; otoyol tüketimi belirgin artar', () => {
+  const k0 = kullanimUygula({ ..._V }, { cekilen: 'yok' }), k1 = kullanimUygula({ ..._V }, { cekilen: 'karavan' });
+  assert.equal(k1.yuk - k0.yuk, CEKILEN.karavan.kg);
+  const oran = _wh('otoyol', 100, k1) / _wh('otoyol', 100, k0);
+  assert.ok(oran > 1.6 && oran < 2.2, String(oran));
+});
+
+test('düşük lastik basıncı yuvarlanma direncini artırır', () => {
+  assert.equal(basincCrrKat(0), 1);
+  assert.ok(basincCrrKat(0.3) > 1.04 && basincCrrKat(0.3) < 1.07);
+  assert.ok(kullanimUygula({ ..._V }, { basinc: 'cok', lastik: 'kis' }).lastik > 1.19);
+});
+
+test('aksesuar ve batarya soğutma: ılık gündüzde sıfır (kalibrasyon çapaları kaymaz)', () => {
+  assert.equal(aksesuarKw({ gece: false, yagis: false, T: 20 }), 0);
+  assert.equal(bataryaSogutmaKw(25), 0);
+  assert.ok(aksesuarKw({ gece: true, yagis: true, T: 0 }) > 0.5);
+  assert.ok(Math.abs(bataryaSogutmaKw(42) - 0.8) < 1e-9);
+  assert.equal(_wh('otoyol', 110, { ..._V, T: 20 }), _wh('otoyol', 110, { ..._V, T: 20, gunes: null }));
+});
+
+test('yağış şiddeti kademeli; mm bilinmiyorsa eski değer', () => {
+  assert.equal(yagisCrrKat(null), 1.15); assert.equal(yagisCrrKat(0), 1);
+  assert.ok(yagisCrrKat(0.5) < yagisCrrKat(2) && yagisCrrKat(2) < yagisCrrKat(8));
+});
+
+test('yüke bağlı kayıp: düz seyirde yok, dik ve uzun tırmanışta var, tavanlı', () => {
+  assert.equal(yukKayipKat(20), 1);
+  assert.ok(yukKayipKat(60) > 1.015 && yukKayipKat(60) < 1.02);
+  assert.equal(yukKayipKat(500), 1.06);
+  const duz = _bh({ tip: 'otoyol', km: 20, cikis: 0, inis: 0 }, 110, { ..._V });
+  const dik = _bh({ tip: 'otoyol', km: 20, cikis: 1200, inis: 0 }, 110, { ..._V });
+  assert.equal(duz.yukKayipKwh, 0); assert.ok(dik.yukKayipKwh > 0.1, String(dik.yukKayipKwh));
+});
