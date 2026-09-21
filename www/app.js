@@ -4,6 +4,7 @@ import { ARACLAR, VARSAYILAN_ARAC, aracUygula } from './core/arac.js';
 import { havaGetir, havaUygula } from './core/hava.js';
 import { durakPlanla } from './core/plan.js';
 import { yerAra, rotaGetir, rotaIstasyonlari, paketAc } from './core/servis.js';
+import { obdPaneli, kalibrasyon } from './obd-ekran.js';
 
 const $ = id => document.getElementById(id);
 const sayi = (x, b = 0) => Number(x).toLocaleString('tr-TR', { maximumFractionDigits: b, minimumFractionDigits: b });
@@ -15,7 +16,6 @@ const depo = {
   al(k, v) { try { const x = localStorage.getItem(k); return x == null ? v : JSON.parse(x); } catch { return v; } },
   koy(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
-
 const durum = {
   arac: depo.al('arac', VARSAYILAN_ARAC), soh: depo.al('soh', 1),
   nereden: depo.al('nereden', { ad: 'Ayrancı, Çankaya, Ankara', lat: 39.8985, lon: 32.8617 }),
@@ -91,7 +91,13 @@ const bildir = (m, hata = false) => { $('durum').textContent = m; $('durum').cla
 $('planla').onclick = async () => {
   const btn = $('planla'); btn.disabled = true;
   const hizKat = +$('hiz').value / 100;
-  const k = aracUygula({ ...VARSAYILAN, soc0: +$('soc').value, rezerv: 10 }, durum.arac, durum.soh);
+  const kal = kalibrasyon();
+  const k = { ...aracUygula({ ...VARSAYILAN, soc0: +$('soc').value, rezerv: 10 }, durum.arac, durum.soh),
+              ...(kal?.tuketimKat ? { tuketimKat: kal.tuketimKat } : {}) };
+  // OBD'den ölçülen kullanılabilir kapasite, katalog değerinin makul aralığındaysa elle girilen sağlığın yerine geçer.
+  if (kal?.kapasiteKwh && kal.kapasiteKwh > k.kap * 0.7 && kal.kapasiteKwh < k.kap * 1.08) k.kap = kal.kapasiteKwh;
+  const garaj = $('garaj').value, onIsitma = $('onIsitma').checked;
+  depo.koy('garaj', garaj); depo.koy('onIsitma', onIsitma);
   const varisSoc = +$('varis').value;
   const cikisMs = new Date($('cikis').value).getTime() || Date.now();
   try {
@@ -110,7 +116,11 @@ $('planla').onclick = async () => {
       } catch { /* havasız devam: genel koşullar kullanılır */ }
       bildir(`Rota ${i + 1}: yol üstündeki istasyonlar…`);
       const ist = { istasyonlar: rotaIstasyonlari(r.sekil, pk.istasyonlar) };
-      const plan = durakPlanla(bolumler, ist.istasyonlar, k, { hizKat, varisSoc });
+      const plan = durakPlanla(bolumler, ist.istasyonlar, k, {
+        hizKat, varisSoc, onIsitma,
+        bataryaT0: garaj === '' ? undefined : +garaj,
+        sicaklikTablosu: kal?.sicaklikTablosu || undefined,
+      });
       durum.sonuclar.push({ rota: r, bolumler, plan, ist, havaVar, k });
     }
     durum.secili = 0;
@@ -146,7 +156,8 @@ function ciz() {
 
   const n = p.duraklar.length;
   $('ozet').innerHTML = `<strong>${sure(p.toplamDk)}</strong> yolculuk, ${n ? `<strong>${n}</strong> şarj durağı (${sure(p.sarjDk)})` : 'şarj durağı yok'}, varışta <strong>%${sayi(p.varisSoc)}</strong>. `
-    + `Ortalama ${sayi(p.ortWh)} Wh/km, toplam ${sayi(p.toplamKwh, 1)} kWh.`;
+    + `Ortalama ${sayi(p.ortWh)} Wh/km, toplam ${sayi(p.toplamKwh, 1)} kWh.`
+    + (p.termal?.onIsitmaKazanciDk >= 3 ? ` Ön ısıtma şarj süresini ${p.termal.onIsitmaKazanciDk} dk kısaltıyor.` : '');
 
   const u = [];
   if (p.sorun) u.push(`<p class="uyari">${kacis(p.sorun.mesaj)}. Menzili uzatmak için hızı düşürmeyi ya da çıkış bataryasını artırmayı deneyin.</p>`);
@@ -179,8 +190,18 @@ function durakHtml(d) {
     <div class="km">${sayi(d.km)}. km${i.sapmaKm > 0.5 ? `, yoldan ${sayi(i.sapmaKm, 1)} km` : ''}, ${kacis(i.il || '')}</div>
     <div class="ad">${kacis(i.marka || '')} ${kacis(i.ad)}</div>
     <div class="sarj">%${sayi(d.varisSoc)} → %${d.hedefSoc} <span>${d.dk} dk, ${sayi(d.ekKwh, 1)} kWh, ${sayi(i.kw)} kW × ${i.soketSayisi || 1}</span></div>
+    ${isiSatiri(d)}
     <p class="not">${kacis(i.operator || '')}.${konum} ${haritaLink(i)}</p>
     ${yedek}</li>`;
+}
+
+// Batarya sıcaklığı satırı: soğuksa ne yapılacağını söyler, ılıksa sessiz kalır.
+function isiSatiri(d) {
+  if (d.bataryaTVaris == null) return '';
+  if (d.onIsitma) return `<p class="isi soguk">Batarya varışta ${sayi(d.bataryaTVaris)} °C. Ön ısıtmayı ${sayi(d.onIsitma.baslaKm)}. km'de başlat `
+    + `(${d.onIsitma.dk} dk, ${sayi(d.onIsitma.kwh, 1)} kWh); ısıtmasız ${d.dkIsitmasiz} dk sürerdi.</p>`;
+  if (d.sicaklikKaybiDk >= 2) return `<p class="isi soguk">Batarya ${sayi(d.bataryaT)} °C; soğuk hücre şarjı ${d.sicaklikKaybiDk} dk uzatıyor.</p>`;
+  return `<p class="isi kucuk">Batarya ${sayi(d.bataryaT)} °C, şarja hazır.</p>`;
 }
 
 function bolumTablosu(s) {
@@ -226,4 +247,7 @@ function profilSvg(s) {
   </svg>`;
 }
 
+$('garaj').value = depo.al('garaj', '');
+$('onIsitma').checked = depo.al('onIsitma', true);
+obdPaneli({ planGetir: () => durum.sonuclar[durum.secili]?.plan, olcekGetir: () => ARACLAR[durum.arac].sarjOlcek });
 aracYaz();

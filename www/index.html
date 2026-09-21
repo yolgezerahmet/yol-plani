@@ -59,6 +59,18 @@ input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-v
 .ayar label { display: block; font-size: 14px; color: var(--soluk); }
 .ayar output { font: 600 20px var(--sayi); color: var(--murekkep); float: right; }
 .ayar .genis { grid-column: 1 / -1; }
+.ayar .onay { display: flex; align-items: center; gap: 8px; color: var(--murekkep); font-size: 15px; align-self: end; min-height: 46px; }
+.onay input { width: 22px; height: 22px; accent-color: var(--batarya); }
+.ust { display: flex; gap: 16px; }
+.durak .isi { font-size: 14px; margin-top: 4px; }
+.durak .isi.soguk { color: var(--devlet); }
+dl.degerler { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 12px 0; font-size: 14px; }
+dl.degerler dt { color: var(--soluk); } dl.degerler dd { margin: 0; font: 600 15px var(--sayi); text-align: right; }
+.dugmeler { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.ikincil { font: 600 16px var(--sayi); color: var(--murekkep); background: none; border: 1px solid var(--cizgi); border-radius: 10px; padding: 11px; min-height: 46px; }
+.ikincil:disabled { opacity: .45; }
+pre.ham { font-size: 11px; max-height: 160px; overflow: auto; background: var(--kagit); border-radius: 8px; padding: 8px; white-space: pre-wrap; }
+.kucuk { font-size: 13px; color: var(--soluk); }
 input[type=range] { width: 100%; accent-color: var(--batarya); margin: 6px 0 0; }
 .planla { width: 100%; font: 600 19px var(--sayi); color: var(--kagit); background: var(--murekkep);
   border: 0; border-radius: 12px; padding: 14px; min-height: 52px; }
@@ -113,7 +125,10 @@ dialog output { float: right; font: 600 18px var(--sayi); color: var(--murekkep)
 <main>
   <header>
     <h1>Yol Planı</h1>
-    <button class="arac" id="aracDugme" type="button"></button>
+    <div class="ust">
+      <button class="arac" id="obdDugme" type="button">OBD</button>
+      <button class="arac" id="aracDugme" type="button"></button>
+    </div>
   </header>
 
   <section class="guzergah" aria-label="Güzergâh">
@@ -132,6 +147,13 @@ dialog output { float: right; font: 600 18px var(--sayi); color: var(--murekkep)
       <input id="hiz" type="range" min="80" max="110" step="5" value="100"></label>
     <label class="genis">Çıkış zamanı
       <input id="cikis" type="datetime-local"></label>
+    <label>Araç geceyi geçirdi
+      <select id="garaj">
+        <option value="">Dışarıda</option>
+        <option value="12">Kapalı otoparkta</option>
+        <option value="18">Isıtmalı garajda</option>
+      </select></label>
+    <label class="onay"><input id="onIsitma" type="checkbox" checked> Ön ısıtma kullanacağım</label>
   </section>
 
   <button class="planla" id="planla" type="button">Planla</button>
@@ -157,6 +179,28 @@ dialog output { float: right; font: 600 18px var(--sayi); color: var(--murekkep)
       <input id="soh" type="range" min="80" max="100" step="1" value="100"></label>
     <button class="planla" style="margin-top:18px" value="tamam">Kaydet</button>
   </form>
+</dialog>
+
+<dialog id="obdDialog">
+  <h2 style="margin-top:0">OBD</h2>
+  <p class="kucuk">vLinker MC+ araçta takılıyken ve kontak açıkken bağlan. Kayıtlar yalnızca bu telefonda tutulur.</p>
+  <p class="durum" id="obdDurum" role="status" aria-live="polite"></p>
+  <div class="dugmeler">
+    <button class="ikincil" id="obdBaglan" type="button">Bağlan</button>
+    <button class="ikincil" id="obdOku" type="button" disabled>Oku</button>
+    <button class="ikincil" id="obdKayit" type="button" disabled>Kaydı başlat</button>
+    <button class="ikincil" id="obdKopya" type="button">Ham çıktıyı kopyala</button>
+  </div>
+  <p class="kucuk" id="obdKayitBilgi"></p>
+  <dl class="degerler" id="obdDegerler"></dl>
+  <details><summary class="kucuk">Ham çıktı</summary><pre class="ham" id="obdHam"></pre></details>
+  <h2>Kalibrasyon</h2>
+  <p class="kucuk" id="obdKalib"></p>
+  <div class="dugmeler">
+    <button class="ikincil" id="obdGuncelle" type="button">Kayıtlardan güncelle</button>
+    <button class="ikincil" id="obdSil" type="button">Kayıtları sil</button>
+  </div>
+  <form method="dialog"><button class="planla" style="margin-top:14px">Kapat</button></form>
 </dialog>
 
 <script type="module" src="./app.js"></script>

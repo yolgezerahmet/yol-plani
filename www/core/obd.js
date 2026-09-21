@@ -93,3 +93,36 @@ export class ElmOturum {
   async baslat() { for (const k of BASLAT) await this.komut(k); }
   async oku(pid) { const y = await this.komut(pid); return elmBaytlari(y); }
 }
+
+// ---- Keşif taraması -------------------------------------------------------------------------
+// E-GMP'nin başka modüllerinde yolculuk hesabına doğrudan yarayan veriler var. Aşağıdaki
+// başlık/PID çiftleri 2021–24 araçların topluluk tablolarından; 2026 aracında yanıt verip
+// vermedikleri ve bayt yerleşimleri BİLİNMİYOR. Bu yüzden burada çözülmez: ham yanıt toplanır,
+// ilk gerçek çıktıyla çözücü yazılır ve testi eklenir.
+export const KESIF = [
+  { baslik: '7E4', pid: '220105', ne: 'BMS: SoH, hücre sapması, soğutma suyu' },
+  { baslik: '7E4', pid: '220106', ne: 'BMS: soğutma/ısıtma durumu' },
+  { baslik: '7C6', pid: '22B002', ne: 'Gösterge: kilometre sayacı' },
+  { baslik: '7B3', pid: '220100', ne: 'Klima: iç/dış sıcaklık' },
+  { baslik: '7A0', pid: '22C00B', ne: 'Lastik basıncı ve sıcaklığı' },
+  { baslik: '7E2', pid: '2101',   ne: 'Araç kontrol: hız, vites' },
+];
+
+// Her girdiyi sırayla sorar; hata veren atlanır. Sonunda başlık BMS'ye döner ki kayıt sürsün.
+export async function kesifTara(oturum, liste = KESIF) {
+  const sonuc = [];
+  let baslik = null;
+  for (const g of liste) {
+    try {
+      if (g.baslik !== baslik) { await oturum.komut('ATSH' + g.baslik); baslik = g.baslik; }
+      const ham = await oturum.komut(g.pid);
+      let bayt = null;
+      try { bayt = elmBaytlari(ham); } catch { /* NO DATA vb. */ }
+      sonuc.push({ ...g, yanit: !!bayt?.length, uzunluk: bayt?.length ?? 0, hex: bayt ? hex(bayt) : String(ham).trim() });
+    } catch (e) {
+      sonuc.push({ ...g, yanit: false, uzunluk: 0, hex: e.message });
+    }
+  }
+  if (baslik !== '7E4') await oturum.komut('ATSH7E4').catch(() => {});
+  return sonuc;
+}

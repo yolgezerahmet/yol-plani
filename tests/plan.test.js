@@ -113,3 +113,27 @@ test('yedekler asıl durağın yakınından seçilir, yol başından değil', ()
   assert.ok(d.yedekler.length > 0);
   assert.ok(d.yedekler.every(y => y.rotaKm >= d.km / 2), 'ilk 10 km yedek sayılmaz');
 });
+
+test('soğuk havada ön ısıtma durak süresini kısaltır', () => {
+  const soguk = duz(100, 5).map(b => ({ ...b, T: 0 }));
+  const istasyonlar = [100, 200, 300, 400].map(x => ist(x, 350));
+  const acik = durakPlanla(soguk, istasyonlar, K, { bataryaT0: 2 });
+  const kapali = durakPlanla(soguk, istasyonlar, K, { bataryaT0: 2, onIsitma: false });
+  assert.ok(acik.sarjDk < kapali.sarjDk, `açık ${acik.sarjDk}, kapalı ${kapali.sarjDk}`);
+  const d = acik.duraklar[0];
+  assert.ok(d.onIsitma && d.onIsitma.dk > 0 && d.onIsitma.baslaKm < d.km);
+  assert.ok(d.bataryaT > d.bataryaTVaris);
+  assert.ok(acik.termal.onIsitmaKazanciDk >= 3);
+});
+
+test('ılık havada ön ısıtma gerekmez', () => {
+  const ilik = duz(100, 5).map(b => ({ ...b, T: 28 }));
+  const p = durakPlanla(ilik, [100, 200, 300, 400].map(x => ist(x, 350)), K, { bataryaT0: 28 });
+  assert.ok(p.duraklar.every(d => !d.onIsitma));
+  assert.equal(p.termal.onIsitmaKazanciDk, 0);
+});
+
+test('OBD tüketim katsayısı enerjiyi ölçekler', () => {
+  const a = enerjiEgrisi(duz(100, 2), K).toplamKwh, b = enerjiEgrisi(duz(100, 2), { ...K, tuketimKat: 1.1 }).toplamKwh;
+  assert.ok(Math.abs(b / a - 1.1) < 1e-9);
+});

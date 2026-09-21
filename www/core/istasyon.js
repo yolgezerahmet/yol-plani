@@ -41,7 +41,7 @@ export function normalize(poi, { uyumlu = UYUMLU_DC, simdi = Date.now() } = {}) 
   if (!kw) return null;
   return {
     id: poi.ID,
-    ad: a.Title || 'Adsu0131z istasyon',
+    ad: a.Title || 'Adsız istasyon',
     enlem: a.Latitude, boylam: a.Longitude,
     il: a.Town || a.StateOrProvince || '',
     kw,

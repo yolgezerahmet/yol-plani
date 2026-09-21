@@ -79,3 +79,13 @@ test('yanıt gelmezse zaman aşımı hatası verir, sonraki komut çalışır', 
   await assert.rejects(o.komut('220101'), /yanıt gelmedi/);
   assert.match(await o.komut('ATE0'), /OK/);
 });
+
+import { kesifTara, KESIF } from '../www/core/obd.js';
+test('keşif taraması başlık değiştirir, yanıtsızı atlar, BMS başlığına döner', async () => {
+  const t = sahteTasima({ 220105: '62 01 05 AA BB', '22B002': 'NO DATA' });
+  const o = new ElmOturum(t, { zamanAsimiMs: 200 });
+  const r = await kesifTara(o, KESIF.slice(0, 3));
+  assert.equal(r[0].yanit, true); assert.equal(r[0].hex, '620105aabb');
+  assert.equal(r[2].yanit, false, 'NO DATA yanıt sayılmaz');
+  assert.deepEqual(t.giden.filter(g => g.startsWith('ATSH')), ['ATSH7E4', 'ATSH7C6', 'ATSH7E4']);
+});
