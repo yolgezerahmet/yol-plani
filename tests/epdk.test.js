@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { satirlariCoz, adresCozumle, mahalleSorgusu, eslestir, konumlandir,
-         istasyonBicimine, birlestir, HASSASIYET } from '../www/core/epdk.js';
+         istasyonBicimine, birlestir, HASSASIYET, apiKaydiCoz, paketle } from '../www/core/epdk.js';
 
 const BASLIK = ['Sıra No','İstasyon No','İstasyon Adı','Hizmet Şekli','Marka','Şarj Ağı İşletmecisi',
                 'Şarj İstasyonu İşletmecisi','Yeşil Şarj İstasyonu mu','Adres','Soket Bilgileri','','',''];
@@ -92,4 +92,36 @@ test('birleştirmede eşleşen OCM kaydı iki kez görünmez', () => {
   const hepsi = birlestir(k, ocm);
   assert.equal(hepsi.length, 2, 'eşleşen tekilleşti, eşleşmeyen OCM kaydı korundu');
   assert.deepEqual(hepsi.map(x => x.kaynak).sort(), ['epdk', 'ocm']);
+});
+
+const API = {
+  sarjIstasyonuNo: 'ŞRJ/7918', sarjIstasyonuAdi: 'TÜED - KOCATEPE', hizmetSekli: 'HALKA_ACIK', marka: 'MULTI FORCE',
+  sarjAgiIsletmecisiUnvan: 'FULL ELEKTRİKLİ ARAÇLAR A.Ş.', sarjIstasyonuIsletmecisi: 'FULL', yesilSarjIstasyonuMu: 'HAYIR',
+  adres: 'Kültür Mahallesi Dr. Mediha Eldem Sokağı  No:49 Çankaya / ANKARA', enlem: 39.9197, boylam: 32.8605,
+  soketler: [{ soketNo: 'SKT/1', soketTipi: 'DC', soketTuru: 'DC_CCS', soketGucu: '180' },
+             { soketNo: 'SKT/2', soketTipi: 'AC', soketTuru: 'AC_TYPE2', soketGucu: '22' }],
+};
+
+test('REST kaydı koordinat, soket ve adresle çözülür', () => {
+  const i = apiKaydiCoz(API);
+  assert.equal(i.enlem, 39.9197); assert.equal(i.dcKw, 180); assert.equal(i.ccsSoket, 1);
+  assert.equal(i.ilce, 'Çankaya'); assert.equal(i.il, 'ANKARA'); assert.equal(i.halkaAcik, true); assert.equal(i.yesil, false);
+});
+
+test('Türkiye dışı ya da boş koordinat geçersiz sayılır', () => {
+  assert.equal(apiKaydiCoz({ ...API, enlem: 0, boylam: 0 }).enlem, null);
+  assert.equal(apiKaydiCoz({ ...API, enlem: 32.86, boylam: 39.92 }).enlem, null, 'yer değiştirmiş enlem-boylam');
+});
+
+test('paket yalnızca halka açık, hızlı ve koordinatlı istasyonları içerir', () => {
+  const p = paketle([
+    API,
+    { ...API, sarjIstasyonuNo: 'ŞRJ/2', hizmetSekli: 'OZEL' },
+    { ...API, sarjIstasyonuNo: 'ŞRJ/3', soketler: [{ soketTipi: 'AC', soketTuru: 'AC_TYPE2', soketGucu: '22' }] },
+    { ...API, sarjIstasyonuNo: 'ŞRJ/4', enlem: null },
+  ], { tarih: '2026-09-21' });
+  assert.equal(p.surum, 2);
+  assert.equal(p.s.length, 1);
+  assert.deepEqual(p.s[0].slice(0, 2), ['7918', 'TÜED - KOCATEPE']);
+  assert.equal(p.operatorler[p.s[0][3]], 'FULL ELEKTRİKLİ ARAÇLAR A.Ş.');
 });
