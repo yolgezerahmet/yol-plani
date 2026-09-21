@@ -5,7 +5,8 @@
 // rezervin üstünde ulaşılabilen istasyonların ileri kısmından en güçlüsünü seç, yalnızca
 // gerektiği kadar (en fazla %80'e) şarj et. %80 üstü E-GMP'de yavaş; iki kısa durak bir uzun
 // duraktan hızlıdır.
-import { bolumHesap, sarjDk } from './model.js';
+import { bolumHesap, sarjDk, sarjSimule } from './model.js';
+import { TERMAL, surusIsinmasi, onIsitma as onIsitmaHesap } from './termal.js';
 import { yedekZinciri } from './istasyon.js';
 
 export const PLAN_VARSAYILAN = { minKw: 50, sarjUst: 80, atlamaUst: 90, pay: 3, ileriOran: 0.75, enFazlaDurak: 8 };
@@ -26,7 +27,9 @@ export function enerjiEgrisi(bolumler, k, { hizKat = 1, soc = 60 } = {}) {
   let dk = 0;
   const satir = bolumler.map(b => {
     const hiz = Math.round((b.hiz || 90) * hizKat);
-    const h = bolumHesap(b, hiz, bolumKosulu(k, b), soc);
+    const h0 = bolumHesap(b, hiz, bolumKosulu(k, b), soc);
+    // OBD'den gelen araca özel düzeltme (ölçülen / model); yoksa 1.
+    const h = { ...h0, kwh: h0.kwh * (k.tuketimKat ?? 1) };
     km.push(km[km.length - 1] + b.km);
     kwh.push(kwh[kwh.length - 1] + h.kwh);
     dk += h.dk;
@@ -115,14 +118,16 @@ export function durakPlanla(bolumler, istasyonlar, k, opt = {}) {
         .slice(0, 3);
       return { ...d, yedekler, yedekVar: yedekler.length > 0 };
     });
-  const sarjDkToplam = duraklar.reduce((t, d) => t + d.dk, 0);
+  const son = yedekli.length ? yedekli : duraklar;
+  const termal = termalGecis(e, bolumler, son, k, o);
+  const sarjDkToplam = son.reduce((t, d) => t + d.dk, 0);
   return {
-    duraklar: yedekli.length ? yedekli : duraklar,
+    duraklar: son, termal,
     varisSoc: +varis.toFixed(1),
     surusDk: Math.round(e.surusDk), sarjDk: sarjDkToplam,
     toplamDk: Math.round(e.surusDk + sarjDkToplam),
     toplamKm: +L.toFixed(1), toplamKwh: +e.toplamKwh.toFixed(1), ortWh: Math.round(e.ortWh),
-    profil: socProfili(e, k.soc0, duraklar, kap),
+    profil: socProfili(e, k.soc0, son, kap),
     enerji: e, sorun,
   };
 }
@@ -145,4 +150,47 @@ export function socProfili(e, soc0, duraklar, kap) {
     onceki = x;
   }
   return noktalar;
+}
+
+// Isıl geçiş: duraklar seçildikten sonra hücre sıcaklığı rota boyunca yürütülür, her durağın
+// şarj süresi sıcaklığa göre yeniden hesaplanır. Ön ısıtma açıksa durağa varmadan hedefe ısıtılır;
+// ısıtıcı enerjisi bataryadan gider ve varış SoC'sinden düşülür. Her iki senaryo da raporlanır ki
+// kullanıcı ön ısıtmanın kaç dakika kazandırdığını görsün.
+// o.bataryaT0: çıkıştaki hücre sıcaklığı (kapalı otoparkta gece geçirdiyse garaj sıcaklığı).
+// o.onIsitma: varsayılan açık. o.sicaklikTablosu: OBD kalibrasyonundan gelen tablo.
+export function termalGecis(e, bolumler, duraklar, k, o = {}) {
+  const t = { ...TERMAL, ...(k.termal || {}) };
+  const ortam = i => bolumler[Math.min(i, bolumler.length - 1)]?.T ?? k.T;
+  let T = o.bataryaT0 ?? ortam(0), km = 0, i = 0, kazanc = 0;
+  const onIsitmaAcik = o.onIsitma !== false;
+  const sat = e.satir;
+  for (const d of duraklar) {
+    // Durağa kadar olan bölümleri (ve bölüm parçalarını) sür.
+    while (i < sat.length && km + sat[i].km <= d.km + 1e-6) {
+      T = surusIsinmasi(T, ortam(i), sat[i].kwh, sat[i].dk, t); km += sat[i].km; i++;
+    }
+    if (i < sat.length && d.km > km) {
+      const oran = (d.km - km) / sat[i].km;
+      T = surusIsinmasi(T, ortam(i), sat[i].kwh * oran, sat[i].dk * oran, t);
+    }
+    const dis = ortam(i), Tvaris = +T.toFixed(1);
+    const isitma = onIsitmaAcik ? onIsitmaHesap(T, dis, t) : { dk: 0, kwh: 0, T };
+    const hizKmh = sat[Math.max(0, i - 1)] ? sat[Math.max(0, i - 1)].km / (sat[Math.max(0, i - 1)].dk / 60) : 90;
+    const varis = Math.max(0, d.varisSoc - isitma.kwh / k.kap * 100);
+    const ortak = { olcek: k.sarjOlcek || 1, ortamT: dis, termal: t, tablo: o.sicaklikTablosu };
+    const sicakli = sarjSimule(varis, d.hedefSoc, d.istasyon.kw, k.kap, { ...ortak, T: isitma.T });
+    const isitmasiz = sarjSimule(d.varisSoc, d.hedefSoc, d.istasyon.kw, k.kap, { ...ortak, T: Tvaris });
+    const sabit = k.sabitdk ?? 4;
+    d.bataryaT = onIsitmaAcik ? isitma.T : Tvaris;
+    d.bataryaTVaris = Tvaris;
+    d.ortamT = dis;
+    d.onIsitma = isitma.dk ? { dk: isitma.dk, kwh: isitma.kwh, baslaKm: Math.max(0, Math.round(d.km - isitma.dk / 60 * hizKmh)) } : null;
+    d.varisSoc = +varis.toFixed(1);
+    d.dk = Math.round(sicakli.dk + sabit);
+    d.dkIsitmasiz = Math.round(isitmasiz.dk + sabit);
+    d.sicaklikKaybiDk = Math.max(0, Math.round(sicakli.sicaklikKaybiDk));
+    kazanc += d.dkIsitmasiz - d.dk;
+    T = sicakli.T;
+  }
+  return { bataryaT0: +(o.bataryaT0 ?? ortam(0)).toFixed(1), onIsitma: onIsitmaAcik, onIsitmaKazanciDk: Math.max(0, kazanc) };
 }
