@@ -24,7 +24,7 @@ export function anahtar(ad) {
   return String(ad ?? '')
     .toLocaleLowerCase('tr')
     .replace(/\s*mahallesi\s*$/i, '')
-    .replace(/[çğıöşü]/g, c => ({ 'ç': 'c', 'ğ': 'g', 'ı': 'i', 'ö': 'o', 'ş': 's', 'ü': 'u' }[c]))
+    .replace(/[çğıöşü]/g, c => ({ ç: 'c', ğ: 'g', ı: 'i', ö: 'o', ş: 's', ü: 'u' }[c]))
     .replace(/[^a-z0-9]/g, '');
 }
 
@@ -52,12 +52,22 @@ export function mesafeKm(a, b) {
 // Mahalle adından konum bulur. Aynı ad birden çok yerde varsa (Türkiye'de sık),
 // ilçe merkezine en yakın olan seçilir — bu yüzden ilceKonumu önemli.
 // Tür önceliği: şehir içi mahalle türleri köy/kasabadan önce gelir.
+// Türkiye'nin hemen her ilinde bulunan mahalle adları. İlçe merkezi olmadan bunlara konum verilmez;
+// il kutusunda tek görünseler bile komşu ilden taşmış olabilirler.
+export const GENEL_ADLAR = new Set(['Merkez', 'Cumhuriyet', 'Atatürk', 'Yeni', 'Fatih', 'İstiklal', 'Hürriyet',
+  'Yenimahalle', 'Bahçelievler', 'Esentepe', 'Yeşilyurt', 'Gazi', 'Zafer', 'Kurtuluş', 'İnönü', 'Mimar Sinan',
+  'Kocatepe', 'Yavuz Selim', 'Barbaros', 'Mevlana', 'Yunus Emre', 'Sanayi', 'Organize Sanayi', 'Yeşiltepe',
+  'Karşıyaka', 'Çamlık', 'Aydınlıkevler', 'Emek', 'Güzelyurt', 'Kardeşler'].map(anahtar));
+
 const TUR_ONCELIK = { neighbourhood: 0, suburb: 1, quarter: 2, town: 3, village: 4, city: 5 };
 
 export function bul(dizin, mahalleAdi, ilceKonumu = null, { enFazlaKm = 40 } = {}) {
   const adaylar = dizin.get(anahtar(mahalleAdi));
   if (!adaylar?.length) return null;
   let liste = adaylar;
+  // İlçe merkezi bilinmiyorsa yalnızca tekil ad kabul edilir: "Merkez", "Cumhuriyet", "Fatih"
+  // gibi adlar il kutusuna taşan komşu ilde de vardır; yanlış konum, konumsuzluktan kötüdür.
+  if (!ilceKonumu && (adaylar.length > 1 || GENEL_ADLAR.has(anahtar(mahalleAdi)))) return null;
   if (ilceKonumu) {
     liste = adaylar
       .map(n => ({ n, km: mesafeKm(n, ilceKonumu) }))
@@ -74,7 +84,7 @@ export function bul(dizin, mahalleAdi, ilceKonumu = null, { enFazlaKm = 40 } = {
 }
 
 // EPDK istasyon listesini çevrimdışı konumlandırır.
-// ilceKonumlari: { "Melikgazi": {lat, lon} } — ilçe merkezleri, ayırım için.
+// ilceKonumlari: { "Melikgazi": {lat, lon} } — ilçe merkezleri, ayrım için.
 export function konumSozlugu(istasyonlar, dizin, ilceKonumlari = {}) {
   const s = {};
   for (const i of istasyonlar) {

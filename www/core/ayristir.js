@@ -8,13 +8,13 @@ const HAVA = ['T', 'nem', 'basincPa', 'ruzgarHizi', 'ruzgarYonu', 'yagis', 'ruzg
 function temizle(b, { duz, ilik, sakin }) {
   const c = { ...b };
   if (duz) { c.cikis = 0; c.inis = 0; c.dh = 0; }
-  if (ilik) { c.T = 20; c.nem = 50; c.basincPa = null; c.yagis = false; }
+  if (ilik) { c.T = 20; c.nem = 50; c.basincPa = null; c.yagis = false; c.kar = false; c.gunes = null; }
   if (sakin) { c.ruzgarHizi = 0; c.ruzgar = 0; }
   return c;
 }
 
 export function enerjiAyristir(bolumler, k) {
-  const kk = (o) => ({ ...k, ...(o.ilik ? { T: 20, nem: 50, basincPa: null, yagis: false } : {}), ...(o.sakin ? { ruzgarHizi: 0, ruzgar: 0 } : {}) });
+  const kk = (o) => ({ ...k, ...(o.ilik ? { T: 20, nem: 50, basincPa: null, yagis: false, kar: false, gunes: null } : {}), ...(o.sakin ? { ruzgarHizi: 0, ruzgar: 0 } : {}) });
   const e = o => enerjiEgrisi(bolumler.map(b => temizle(b, o)), kk(o)).toplamKwh;
   const taban = e({ duz: true, ilik: true, sakin: true });
   const rakim = e({ duz: false, ilik: true, sakin: true });

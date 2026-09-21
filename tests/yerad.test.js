@@ -35,7 +35,7 @@ test('anahtar Türkçe harf ve boşluk farkını siler', () => {
 
 test('yazım farkı olan mahalle bulunur', () => {
   const d = dizinKur(NOKTALAR);
-  assert.equal(bul(d, 'Mimarsinan').ad, 'Mimar Sinan');
+  assert.equal(bul(d, 'Mimarsinan', { lat: 38.72, lon: 35.49 }).ad, 'Mimar Sinan');
   assert.equal(bul(d, 'Yıldırım Beyazıt').ad, 'Yıldırımbeyazıt');
   assert.equal(bul(d, 'Bilinmeyen Mahallesi'), null);
 });
@@ -59,7 +59,7 @@ test('şehir içi mahalle türü köyden önce gelir', () => {
     { ad: 'Yeni', tur: 'village', lat: 38.7, lon: 35.5 },
     { ad: 'Yeni', tur: 'neighbourhood', lat: 38.7, lon: 35.5 },
   ]);
-  assert.equal(bul(d, 'Yeni').tur, 'neighbourhood');
+  assert.equal(bul(d, 'Yeni', { lat: 38.7, lon: 35.5 }).tur, 'neighbourhood');
 });
 
 test('mesafe bilinen iki nokta arasında doğru', () => {
@@ -77,4 +77,16 @@ test('konum sözlüğü istasyon listesinden üretilir ve tekilleşir', () => {
   const s = konumSozlugu(ist, d, { Melikgazi: { lat: 38.72, lon: 35.49 } });
   assert.equal(Object.keys(s).length, 1);
   assert.deepEqual(s['Mimarsinan Mahallesi, Melikgazi, KAYSERİ'], [38.75, 35.55]);
+});
+
+test('ilçe merkezi yoksa aynı adlı adaylardan hiçbiri seçilmez', () => {
+  const d = dizinKur(NOKTALAR);
+  assert.equal(bul(d, 'Bahçelievler'), null, 'iki aday varken tahmin yürütülmez');
+  assert.ok(bul(d, 'Gesi'), 'tekil ad yine bulunur');
+});
+
+test('ilçe merkezi yoksa genel mahalle adı tekil olsa da reddedilir', () => {
+  const d = dizinKur([{ ad: 'Merkez', tur: 'town', lat: 39.14, lon: 34.16 }]);
+  assert.equal(bul(d, 'Merkez Mahallesi'), null, 'Pursaklar Merkez, Kırşehir Merkez sanılmaz');
+  assert.ok(bul(d, 'Merkez', { lat: 39.1, lon: 34.1 }), 'ilçe merkezi biliniyorsa yakınlıkla kabul');
 });

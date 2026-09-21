@@ -59,6 +59,9 @@ input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-v
 .ayar label { display: block; font-size: 14px; color: var(--soluk); }
 .ayar output { font: 600 20px var(--sayi); color: var(--murekkep); float: right; }
 .ayar .genis { grid-column: 1 / -1; }
+.kullanim summary { font-size: 15px; color: var(--murekkep); min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+.ayar.ic { margin: 4px 0 0; }
+.ayar input[type=number] { width: 100%; font: 500 16px var(--sayi); padding: 9px 10px; border: 1px solid var(--cizgi); border-radius: 8px; background: var(--kagit); color: var(--murekkep); box-sizing: border-box; }
 .ayar .onay { display: flex; align-items: center; gap: 8px; color: var(--murekkep); font-size: 15px; align-self: end; min-height: 46px; }
 .onay input { width: 22px; height: 22px; accent-color: var(--batarya); }
 .ust { display: flex; gap: 16px; }
@@ -166,6 +169,17 @@ dialog output { float: right; font: 600 18px var(--sayi); color: var(--murekkep)
         <option value="18">Isıtmalı garajda</option>
       </select></label>
     <label class="onay"><input id="onIsitma" type="checkbox" checked> Ön ısıtma kullanacağım</label>
+    <details class="genis kullanim"><summary>Yük, lastik ve klima</summary>
+      <div class="ayar ic">
+        <label>Kişi sayısı <select id="kisi"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></label>
+        <label>Bagaj, kg <input id="bagaj" type="number" inputmode="numeric" min="0" max="400" step="10"></label>
+        <label>Tavan / taşıyıcı <select id="tavan"></select></label>
+        <label>Lastik <select id="lastik"></select></label>
+        <label>Klima <select id="klima"></select></label>
+        <label>Kabin, °C <input id="kabinC" type="number" inputmode="numeric" min="16" max="28" step="1"></label>
+        <label class="onay genis"><input id="sebekeOnKlima" type="checkbox"> Çıkmadan önce, araç şarjdayken kabini ısıtıp soğutacağım</label>
+      </div>
+    </details>
   </section>
 
   <button class="planla" id="planla" type="button">Planla</button>

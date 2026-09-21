@@ -15,6 +15,8 @@ export const SABIT = {
   soğutmaEsigi: 24,  // [T] bu sıcaklığın üstünde soğutma açılır
   EER: 2.5,          // [L] klima soğutma verimi
   temelKw: 0.5,      // [T] sürekli yardımcı yük (aydınlatma, ekran, pompa)
+  camAlani: 2.0,     // [T] güneşe bakan etkin cam alanı, m²
+  camGecirgenlik: 0.45, // [L] ısı yalıtımlı otomobil camı güneş ısı kazanç katsayısı
 };
 
 // Doymuş buhar basıncı (Tetens), Pa. [L]
@@ -68,10 +70,17 @@ export function isiPompasiCop(T) {
 }
 
 // Yardımcı yük (kW): ısıtma ısı pompasıyla, soğutma klimayla, artı sabit tüketim.
-export function yardimciKw(T, { kabin = SABIT.kabinC, ua = SABIT.UA } = {}) {
-  if (T < kabin) return SABIT.temelKw + ua * (kabin - T) / isiPompasiCop(T);
-  if (T > SABIT.soğutmaEsigi) return SABIT.temelKw + ua * (T - SABIT.soğutmaEsigi) / SABIT.EER;
-  return SABIT.temelKw;
+export function yardimciKw(T, o = {}) { return SABIT.temelKw + iklimKw(T, o); }
+
+// Yalnızca iklimlendirme (kW, elektrik). gunes: yatay yüzeye gelen ışınım, W/m² (hava servisinden).
+// Güneş kışın ısıtma ihtiyacını azaltır, yazın soğutma yükünü artırır; ılık ama güneşli havada
+// (eşik altı sıcaklık) klimayı tek başına açtırabilir.
+export function iklimKw(T, { kabin = SABIT.kabinC, ua = SABIT.UA, gunes = null } = {}) {
+  const kazanc = gunes ? gunes * SABIT.camAlani * SABIT.camGecirgenlik / 1000 : 0;   // kW ısı
+  if (T < kabin - 2) return Math.max(0, ua * (kabin - T) - kazanc) / isiPompasiCop(T);
+  const sogutmaIsi = ua * Math.max(0, T - SABIT.soğutmaEsigi) + (T > 15 ? kazanc : 0);
+  // Esik altında yalnız güneşten gelen küçük yük havalandırmayla atılır.
+  return T > SABIT.soğutmaEsigi || sogutmaIsi > 0.4 ? sogutmaIsi / SABIT.EER : 0;
 }
 
 // Rejenerasyon verimi: yavaşlama şiddetine ve batarya sıcaklığına bağlı.

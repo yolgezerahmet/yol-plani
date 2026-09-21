@@ -4,7 +4,7 @@
 
 export const OPEN_METEO = 'https://api.open-meteo.com/v1/forecast';
 export const ALANLAR = ['temperature_2m', 'relative_humidity_2m', 'surface_pressure',
-                        'wind_speed_10m', 'wind_direction_10m', 'precipitation'];
+                        'wind_speed_10m', 'wind_direction_10m', 'precipitation', 'snowfall', 'shortwave_radiation'];
 
 // Rota boyunca kaç örnekleme noktası alınacağını belirler: çok nokta gereksiz, tek nokta yanlış.
 export const ORNEK_ARALIK_KM = 80;
@@ -43,6 +43,7 @@ export function yanitiCozumle(yanit, noktalar) {
     ruzgarMs: y.hourly.wind_speed_10m,
     ruzgarYonu: y.hourly.wind_direction_10m,
     yagisMm: y.hourly.precipitation,
+    karCm: y.hourly.snowfall || null, gunesWm2: y.hourly.shortwave_radiation || null,
   }));
 }
 
@@ -72,6 +73,8 @@ export function anlikHava(nokta, zamanMs) {
     ruzgarHizi: +araDeger(nokta.ruzgarMs, i, t).toFixed(1),
     ruzgarYonu: Math.round(araAci(nokta.ruzgarYonu, i, t)),
     yagis: +araDeger(nokta.yagisMm, i, t).toFixed(1),
+    karCm: nokta.karCm?.[i] != null ? +araDeger(nokta.karCm, i, t).toFixed(2) : 0,
+    gunes: nokta.gunesWm2?.[i] != null ? Math.round(araDeger(nokta.gunesWm2, i, t)) : null,
     tahminDisi: zamanMs > s[s.length - 1] || zamanMs < s[0],
   };
 }
@@ -90,7 +93,7 @@ export function havaUygula(bolumler, noktalar, cikisMs, sureFn, gecis = 2) {
       const orta = b.basKm + b.km / 2;
       const hava = anlikHava(yakinNokta(noktalar, orta), t + sureFn(b, i) * 30000); // bölüm ortası
       t += sureFn(b, i) * 60000 + (b.durak?.dk || 0) * 60000;
-      return hava ? { ...b, ...hava, yagis: hava.yagis > 0.1 } : b;
+      return hava ? { ...b, ...hava, yagis: hava.yagis > 0.1, kar: hava.karCm > 0.05 } : b;
     });
   }
   return sonuc;

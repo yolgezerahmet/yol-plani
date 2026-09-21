@@ -11,13 +11,14 @@ import { yedekZinciri } from './istasyon.js';
 
 export const PLAN_VARSAYILAN = { minKw: 50, sarjUst: 80, atlamaUst: 90, pay: 3, ileriOran: 0.75, enFazlaDurak: 8 };
 
-const HAVA_ALANLARI = ['T', 'nem', 'basincPa', 'ruzgarHizi', 'ruzgarYonu', 'yagis'];
+const HAVA_ALANLARI = ['T', 'nem', 'basincPa', 'ruzgarHizi', 'ruzgarYonu', 'yagis', 'kar', 'gunes'];
 
 // Bölüme kendi havası varsa (havaUygula atar) koşullara o işlenir; yoksa genel koşullar.
 export function bolumKosulu(k, b) {
   const kb = { ...k };
   for (const a of HAVA_ALANLARI) if (b[a] != null) kb[a] = b[a];
   if (b.yagis != null) kb.yagis = !!b.yagis;
+  if (b.kar != null) kb.kar = !!b.kar;
   return kb;
 }
 

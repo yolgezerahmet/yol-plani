@@ -5,6 +5,8 @@ import { havaGetir, havaUygula, ornekNoktalari } from './core/hava.js';
 import { cokluHavaGetir, modelNoktasi, belirsizlik, MODEL_AD } from './core/hava-coklu.js';
 import { durakPlanla, enerjiEgrisi } from './core/plan.js';
 import { bultenGetir, yerSozlugu, rotadakiKayitlar } from './core/kgm.js';
+import { KULLANIM_VARSAYILAN, TAVAN, LASTIK, KLIMA, kullanimUygula, kabinGecisKwh, yolculukKapasiteKat } from './core/kullanim.js';
+import { rotadakiDenetim } from './core/denetim.js';
 
 // KGM bülteni günde bir yayımlanıyor; bir saatlik önbellek yeter.
 let kgmOnbellek = null, sozlukOnbellek = null;
@@ -102,6 +104,14 @@ async function paket() {
   }
   return epdkPaketi;
 }
+// Hız denetimi paketi isteğe bağlı: yoksa (ilk veri güncellemesinden önce) sessizce atlanır.
+let denetimPaketi;
+async function denetim() {
+  if (denetimPaketi === undefined) {
+    try { const y = await fetch('./data/denetim.json'); denetimPaketi = y.ok ? await y.json() : null; } catch { denetimPaketi = null; }
+  }
+  return denetimPaketi;
+}
 const bildir = (m, hata = false) => { $('durum').textContent = m; $('durum').classList.toggle('hata', hata); };
 
 $('planla').onclick = async () => {
@@ -112,6 +122,8 @@ $('planla').onclick = async () => {
               ...(kal?.tuketimKat ? { tuketimKat: kal.tuketimKat } : {}) };
   // OBD'den ölçülen kullanılabilir kapasite, katalog değerinin makul aralığındaysa elle girilen sağlığın yerine geçer.
   if (kal?.kapasiteKwh && kal.kapasiteKwh > k.kap * 0.7 && kal.kapasiteKwh < k.kap * 1.08) k.kap = kal.kapasiteKwh;
+  const kul = kullanimOku();
+  Object.assign(k, kullanimUygula(k, kul));
   const garaj = $('garaj').value, onIsitma = $('onIsitma').checked;
   depo.koy('garaj', garaj); depo.koy('onIsitma', onIsitma);
   const varisSoc = +$('varis').value;
@@ -122,6 +134,7 @@ $('planla').onclick = async () => {
     if (!rotalar.length) throw new Error('Bu iki nokta arasında rota bulunamadı');
     const pk = await paket();
     durum.sonuclar = [];
+    const dnt = await denetim();
     let bulten = null;
     try { bulten = await kgmBulteni(); sozlukOnbellek ??= yerSozlugu(pk.istasyonlar); } catch { bulten = null; }
     for (const [i, r] of rotalar.entries()) {
@@ -144,16 +157,24 @@ $('planla').onclick = async () => {
           }).filter(Boolean);
         }
       } catch { /* havasız devam: genel koşullar kullanılır */ }
+      // Kullanım etkenleri: soğuk/sıcak kabinin ilk dakikaları ve soğuk hücrenin kullanılabilir kapasitesi.
+      const disT0 = bolumler[0]?.T ?? k.T, park = garaj === '' ? disT0 : +garaj;
+      const kabinKwh = kabinGecisKwh(disT0, kul, park);
+      if (kabinKwh > 0 && bolumler.length) bolumler = [{ ...bolumler[0], gecisKayipKwh: (bolumler[0].gecisKayipKwh || 0) + kabinKwh }, ...bolumler.slice(1)];
+      const surusDk = bolumler.reduce((t, b) => t + sureFn(b), 0);
+      const kapKat = yolculukKapasiteKat(park, surusDk);
+      const kr = { ...k, kap: +(k.kap * kapKat).toFixed(2) };
       bildir(`Rota ${i + 1}: yol üstündeki istasyonlar…`);
       const ist = { istasyonlar: rotaIstasyonlari(r.sekil, pk.istasyonlar) };
-      const plan = durakPlanla(bolumler, ist.istasyonlar, k, {
+      const plan = durakPlanla(bolumler, ist.istasyonlar, kr, {
         hizKat, varisSoc, onIsitma,
         bataryaT0: garaj === '' ? undefined : +garaj,
         sicaklikTablosu: kal?.sicaklikTablosu || undefined,
       });
       const yolAdlari = [...new Set(r.bolumler.flatMap(b => b.adlar || []))];
       const yol = bulten ? { tarih: bulten.tarih, kayit: rotadakiKayitlar(bulten, r.sekil, sozlukOnbellek, { yolAdlari }) } : null;
-      durum.sonuclar.push({ rota: r, bolumler, plan, ist, havaVar, hava, yol, k });
+      durum.sonuclar.push({ rota: r, bolumler, plan, ist, havaVar, hava, yol, k: kr, kul, etken: { kabinKwh, kapKat },
+                            denetim: dnt ? { tarih: dnt.tarih, liste: rotadakiDenetim(dnt, r.sekil) } : null });
     }
     durum.secili = 0;
     bildir('');
@@ -215,6 +236,18 @@ function ciz() {
   if (tl > 20) u.push(`<p class="bilgi">${sayi(tl)} km'de hız sınırı haritada etiketli değil; yol türünden tahmin edildi.</p>`);
   const yas = Math.round((Date.now() - Date.parse(epdkPaketi.tarih)) / 864e5);
   if (yas > 21) u.push(`<p class="bilgi">İstasyon listesi ${yas} gün önce alındı; yeni açılan istasyonlar eksik olabilir.</p>`);
+  const et = s.etken || {}, ek = [];
+  if (et.kabinKwh >= 0.3) ek.push(`kabini hedef sıcaklığa getirmek ilk dakikalarda ${sayi(et.kabinKwh, 1)} kWh alıyor (araç şarjdayken ön klimalandırma bunu sıfırlar)`);
+  if (et.kapKat < 0.995) ek.push(`soğuk batarya kullanılabilir kapasiteyi yaklaşık %${sayi((1 - et.kapKat) * 100, 1)} azaltıyor`);
+  if (s.kul?.tavan && s.kul.tavan !== 'yok') ek.push(`${TAVAN[s.kul.tavan].ad.toLocaleLowerCase('tr-TR')} hava direncini %${Math.round((TAVAN[s.kul.tavan].cda - 1) * 100)} artırıyor`);
+  if (s.bolumler.some(b => b.kar)) ek.push('rotanın bir kısmında kar yağışı bekleniyor; karlı zemin tüketimi artırır, hızın da düşeceğini hesaba kat');
+  if (ek.length) u.push(`<p class="bilgi">Kullanım etkileri: ${ek.join('; ')}.</p>`);
+  const dl = s.denetim?.liste || [];
+  if (dl.length) {
+    const kor = dl.filter(x => x.tur === 'koridor'), kam = dl.length - kor.length;
+    u.push(`<p class="bilgi">Rotada haritada işli ${kam ? kam + ' sabit hız kamerası' : ''}${kam && kor.length ? ' ve ' : ''}${kor.length ? kor.length + ' ortalama hız koridoru (' + kor.map(x => sayi(x.km) + '. km' + (x.limit ? ', ' + x.limit + ' km/h' : '')).join('; ') + ')' : ''} var.`
+      + `${+$('hiz').value > 100 ? ' Koridorlarda ortalama hız limitle sınırlı; süre tahmini oralarda iyimser kalır.' : ''} Liste OpenStreetMap'ten gelir ve eksiktir; gezici denetim içermez.</p>`);
+  }
   const hv = s.hava;
   if (hv?.belirsizlik?.yuksek) {
     const b = hv.belirsizlik, r = b.ruzgar.deger >= 6 ? `rüzgârda ${sayi(b.ruzgar.deger * 3.6)} km/h (${sayi(b.ruzgar.km)}. km civarı)` : `sıcaklıkta ${sayi(b.T.deger)} °C (${sayi(b.T.km)}. km civarı)`;
@@ -328,6 +361,17 @@ function profilSvg(s) {
   </svg>`;
 }
 
+const sec = (id, tablo, deger) => { $(id).innerHTML = Object.entries(tablo).map(([v, o]) => `<option value="${v}">${kacis(o.ad)}</option>`).join(''); $(id).value = deger; };
+function kullanimOku() {
+  const u = { kisi: +$('kisi').value || 1, bagajKg: +$('bagaj').value || 0, tavan: $('tavan').value, lastik: $('lastik').value,
+              klima: $('klima').value, kabinC: +$('kabinC').value || 22, sebekeOnKlima: $('sebekeOnKlima').checked };
+  depo.koy('kullanim', u); return u;
+}
+{
+  const u = { ...KULLANIM_VARSAYILAN, ...depo.al('kullanim', {}) };
+  sec('tavan', TAVAN, u.tavan); sec('lastik', LASTIK, u.lastik); sec('klima', KLIMA, u.klima);
+  $('kisi').value = u.kisi; $('bagaj').value = u.bagajKg; $('kabinC').value = u.kabinC; $('sebekeOnKlima').checked = u.sebekeOnKlima;
+}
 $('garaj').value = depo.al('garaj', '');
 $('onIsitma').checked = depo.al('onIsitma', true);
 obdPaneli({ planGetir: () => durum.sonuclar[durum.secili]?.plan, olcekGetir: () => ARACLAR[durum.arac].sarjOlcek,

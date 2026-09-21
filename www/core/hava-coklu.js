@@ -10,7 +10,8 @@ import { mesafeKm } from './istasyon.js';
 export const MODELLER = ['ecmwf_ifs025', 'icon_seamless', 'gfs_seamless', 'meteofrance_seamless'];
 export const MODEL_AD = { ecmwf_ifs025: 'ECMWF', icon_seamless: 'ICON', gfs_seamless: 'GFS', meteofrance_seamless: 'Météo-France' };
 const ALAN_ESLE = { temperature_2m: 'T', relative_humidity_2m: 'nem', surface_pressure: 'basincHpa',
-                    wind_speed_10m: 'ruzgarMs', wind_direction_10m: 'ruzgarYonu', precipitation: 'yagisMm' };
+                    wind_speed_10m: 'ruzgarMs', wind_direction_10m: 'ruzgarYonu', precipitation: 'yagisMm',
+                    snowfall: 'karCm', shortwave_radiation: 'gunesWm2' };
 
 export function topluUrl(noktalar, gun = 3, modeller = MODELLER) {
   const lat = noktalar.map(n => n.enlem).join(','), lon = noktalar.map(n => n.boylam).join(',');
@@ -48,11 +49,12 @@ const aralik = a => { const s = a.filter(v => v != null); return s.length ? Math
 export function birlestir(nokta) {
   const md = Object.values(nokta.modeller);
   const n = nokta.saat.length, r = { km: nokta.km, enlem: nokta.enlem, boylam: nokta.boylam, saat: nokta.saat,
-    T: [], nem: [], basincHpa: [], ruzgarMs: [], ruzgarYonu: [], yagisMm: [], acilmaT: [], acilmaRuzgar: [], modelSayisi: md.length };
+    T: [], nem: [], basincHpa: [], ruzgarMs: [], ruzgarYonu: [], yagisMm: [], karCm: [], gunesWm2: [], acilmaT: [], acilmaRuzgar: [], modelSayisi: md.length };
   for (let i = 0; i < n; i++) {
     const al = k => md.map(m => m[k]?.[i]);
     r.T.push(ortanca(al('T'))); r.nem.push(ortanca(al('nem'))); r.basincHpa.push(ortanca(al('basincHpa')));
     r.yagisMm.push(ortanca(al('yagisMm')));
+    r.karCm.push(ortanca(al('karCm')) ?? 0); r.gunesWm2.push(ortanca(al('gunesWm2')));
     const u = [], v = [];
     md.forEach(m => { const s = m.ruzgarMs?.[i], y = m.ruzgarYonu?.[i];
       if (s != null && y != null) { u.push(s * Math.sin(y * Math.PI / 180)); v.push(s * Math.cos(y * Math.PI / 180)); } });

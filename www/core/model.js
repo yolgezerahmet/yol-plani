@@ -2,7 +2,7 @@
 // Fiziksel alt katman fizik.js'te; buradaki işlevler onu bölüm ölçeğine uygular.
 // Kalibrasyon hedefleri (EV Database, IONIQ 5 63 kWh RWD): 110 km/h 20 °C ≈ 190 Wh/km, −10 °C ≈ 245 Wh/km.
 import { sicaklikKatsayisi, direncIsisi, ilerlet, TERMAL } from './termal.js';
-import { SABIT, havaYogunlugu as ro, basincTahmini, akisDirenci, ruzgarBilesenleri, yardimciKw, inisGeriKazanim } from './fizik.js';
+import { SABIT, havaYogunlugu as ro, basincTahmini, akisDirenci, ruzgarBilesenleri, yardimciKw, iklimKw, inisGeriKazanim } from './fizik.js';
 
 export const TIP = {
   otoyol:   { ad: 'Otoyol',               f: 1.00, akis: 0.97, limit: 130, hiz: 115, renk: '--otoyol' },
@@ -38,9 +38,11 @@ export function whKm(tip, hiz, k, b = {}) {
     : { karsi: (k.ruzgar || 0) / 3.6 * ruzgarKat, yan: 0 };
   const a = akisDirenci(h, vekt.karsi, vekt.yan, k.cda);
   const Fa = yogunluk(k, b.rakim) * a.kuvvet;
-  const crr = k.crr * k.lastik * (b.crrKat ?? 1) * (1 + 0.003 * Math.max(0, 20 - k.T)) * (k.yagis ? 1.15 : 1);
+  // Karlı/sulu karlı zeminde yuvarlanma direnci ıslak yoldan belirgin yüksek [T]; kar yağışı varsa o geçerli.
+  const crr = k.crr * k.lastik * (b.crrKat ?? 1) * (1 + 0.003 * Math.max(0, 20 - k.T)) * (k.kar ? 1.35 : k.yagis ? 1.15 : 1);
   const Fr = crr * (k.bos + k.yuk) * G;
-  return (Fa + Fr) / 3.6 / k.verim * t.f + yardimciKw(k.T) * 1000 / (h * (b.akisOrani ?? t.akis));
+  const yardimci = SABIT.temelKw + (k.ekYukKw || 0) + iklimKw(k.T, { kabin: k.kabinC ?? SABIT.kabinC, gunes: k.gunes ?? null }) * (k.klimaKat ?? 1);
+  return (Fa + Fr) / 3.6 / k.verim * t.f + yardimci * 1000 / (h * (b.akisOrani ?? t.akis));
 }
 
 // Bir bölümün enerjisi (kWh), ortalama Wh/km ve süresi (dk). b: {tip, km, dh}
