@@ -2,7 +2,9 @@
 // bataryası için dağılım verilir; sürücü "en kötü gerçekçi durumda" nereye varacağını görür.
 //
 // Kaynaklar (bağımsız varsayılır, kareler toplanır):
-//   model hatası: kalibrasyonsuz %6, OBD ile ≥ 3 yolculuk ölçülmüşse %3 (enerjinin oranı) [T]
+//   model hatası: aracın kendi ölçülmüş artık hatası (ogrenme.js) varsa o; yoksa kalibrasyonsuz %8,
+//   OBD ile ≥ 3 yolculuk varsa %6. Literatürde en iyi filo modelleri ~%5–6 ortalama hata veriyor
+//   (Zhu ve ark. 2025); önceki %3 varsayımı iyimserdi.
 //   hava: model topluluğu senaryolarının yayılımı (en yüksek − en düşük) / 4 ≈ σ
 // Bacak enerjisi arttıkça hata büyür; bu yüzden uzun bacaklar daha riskli görünür.
 import { aralikKwh } from './plan.js';
@@ -15,8 +17,8 @@ function erf(x) {                                 // Abramowitz–Stegun 7.1.26
   return s * (1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x));
 }
 
-export function sigmaOrani({ kalibreYolculuk = 0, havaSenaryoKwh = [], toplamKwh = 0 } = {}) {
-  const model = kalibreYolculuk >= 3 ? 0.03 : 0.06;
+export function sigmaOrani({ kalibreYolculuk = 0, havaSenaryoKwh = [], toplamKwh = 0, olculen = null } = {}) {
+  const model = olculen != null ? Math.max(0.025, olculen) : kalibreYolculuk >= 3 ? 0.06 : 0.08;
   const hava = havaSenaryoKwh.length > 1 && toplamKwh > 0 ? (Math.max(...havaSenaryoKwh) - Math.min(...havaSenaryoKwh)) / 4 / toplamKwh : 0.015;
   return { model, hava: +hava.toFixed(4), toplam: +Math.hypot(model, hava).toFixed(4) };
 }

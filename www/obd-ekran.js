@@ -6,6 +6,7 @@ import { sarjOturumlari, sicaklikTablosu, kapasiteTahmini, tuketimKatsayisi } fr
 import { mesafeKm } from './core/istasyon.js';
 import { olcumOzeti } from './core/olcum.js';
 import { isabet } from './core/isabet.js';
+import { bosDurum, ogrenmeOzeti } from './core/ogrenme.js';
 import { servisAl, servisBirak, periyodik, konumDinle } from './servis.js';
 
 const $ = id => document.getElementById(id);
@@ -22,6 +23,9 @@ export const kalibrasyon = () => depo.al('kalibrasyon', null);
 const dinleyiciler = new Set();
 export const obdDinle = cb => { dinleyiciler.add(cb); return () => dinleyiciler.delete(cb); };
 export const obdBagli = () => !!obd.oturum;
+// Öğrenen tüketim modelinin durumu (core/ogrenme.js). Yalnız bu telefonda.
+export const ogrenmeDurumu = () => depo.al('ogrenme', null) || bosDurum();
+export const ogrenmeKaydet = d => depo.koy('ogrenme', d);
 export function obdKaydiAc(plan) { if (obd.oturum && !obd.zamanlayici) kaydiBaslat(plan); }
 // İstasyon no → en son ölçümler (yalnızca bu telefonda).
 export const olcumler = () => depo.al('olcumler', []);
@@ -180,6 +184,8 @@ export function kalibrasyonMetni(k = kalibrasyon()) {
   p.push(`${k.oturum} şarj oturumu, ${k.olculenDilim} sıcaklık dilimi ölçüldü`);
   if (k.kapasiteKwh) p.push(`kullanılabilir kapasite ≈ ${sayi(k.kapasiteKwh, 1)} kWh`);
   if (k.tuketimKat) p.push(`tüketim modelin %${sayi(k.tuketimKat * 100)}'i (${k.yolculuk} yolculuk)`);
+  const og = ogrenmeOzeti(depo.al('ogrenme', null));
+  if (og) p.push(og.replace(/\.$/, ''));
   const is = isabet(depo.al('obd:yolculuklar', []));
   if (is) p.push(`tahmin isabeti: ${is.yolculuk} yolculuk, ${sayi(is.km)} km'de ortalama hata %${sayi(is.mape, 1)} (${is.sapma > 0 ? 'fazla' : 'az'} tahmin yönünde)`);
   const o = olcumler();
@@ -203,7 +209,7 @@ export function obdPaneli({ planGetir, olcekGetir, istasyonlarGetir = async () =
   };
   $('obdSil').onclick = () => {
     if (!confirm('Telefondaki tüm OBD kayıtları ve kalibrasyon silinsin mi?')) return;
-    ['obd:ornekler', 'obd:yolculuklar', 'kalibrasyon', 'olcumler'].forEach(k => localStorage.removeItem(k));
+    ['obd:ornekler', 'obd:yolculuklar', 'kalibrasyon', 'olcumler', 'ogrenme'].forEach(k => localStorage.removeItem(k));
     $('obdKalib').textContent = kalibrasyonMetni(null); $('obdKayitBilgi').textContent = '';
   };
 }

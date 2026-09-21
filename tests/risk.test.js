@@ -10,10 +10,11 @@ const st = km => ({ id: 'k' + km, no: 'N' + km, ad: 'İst', marka: 'ZES', operat
 const k = { ...VARSAYILAN, soc0: 90, rezerv: 10 };
 
 test('kalibrasyon belirsizliği azaltır; hava yayılımı eklenir', () => {
-  assert.equal(sigmaOrani({}).model, 0.06);
-  assert.equal(sigmaOrani({ kalibreYolculuk: 5 }).model, 0.03);
+  assert.equal(sigmaOrani({}).model, 0.08);
+  assert.equal(sigmaOrani({ kalibreYolculuk: 5 }).model, 0.06);
+  assert.equal(sigmaOrani({ olculen: 0.041 }).model, 0.041);      // aracın kendi ölçülmüş hatası önceliklidir
   const s = sigmaOrani({ kalibreYolculuk: 5, havaSenaryoKwh: [100, 104, 108], toplamKwh: 104 });
-  assert.ok(Math.abs(s.hava - 8 / 4 / 104) < 1e-4); assert.ok(s.toplam > 0.03);
+  assert.ok(Math.abs(s.hava - 8 / 4 / 104) < 1e-4); assert.ok(s.toplam > 0.06);
 });
 
 test('bacak riski: her durak ve varış için P10; uzun bacak daha belirsiz', () => {

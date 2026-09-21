@@ -165,3 +165,10 @@ Yerel Capacitor eklentisi `plugins/yol-servisi` (Java), JS tarafı `www/servis.j
 - **Bekçi:** JS 45 sn bildirimi güncellemezse kart "yanıt vermiyor" der. Arka planda WebView'in çalışıp çalışmadığı cihazda böyle görülür.
 - Kullanıcılar: yolda modu ve OBD kaydı; ikisi de bırakınca servis durur.
 - Doğrulanmadı: WebView JS'inin arka planda yerel olaylarla sürmesi (Android/WebView sürümüne bağlı). Durursa sıradaki adım karar hesabını servis içinde QuickJS ile çalıştırmak.
+
+## Öğrenen tüketim modeli (Eylül 2026)
+`core/ogrenme.js`. Yolda modunda OBD bağlıyken her ≥ 8 km'lik kesit bir ölçüm penceresi olur: modelin o kesit için
+gerçek ortalama hızla hesapladığı üç bileşen (hava direnci, yuvarlanma, yardımcı yük) ile ölçülen enerji karşılaştırılır,
+üç çarpan güncellenir. 8 pencereden sonra plan bu çarpanları kullanır ve kaba tek katsayı devre dışı kalır.
+Aykırı pencereler (4σ) atılır, çarpanlar 0,7–1,5 arasında tutulur. Sürücünün yol tipine göre hız alışkanlığı ayrı öğrenilir
+(henüz yalnız raporlanıyor). Ölçülen artık hata, risk hesabındaki varsayımın yerini alır. Dayanaklar: `docs/literatur.md`.

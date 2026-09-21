@@ -3,7 +3,8 @@
 import { onIsitmaHarcanan, rotaKonumu, canliKat, canliDurum, canliMesaj, sarjDurumu, yenidenPlanla, kalanBolumler } from './core/canli.js';
 import { sarjDk } from './core/model.js';
 import { aralikKwh } from './core/plan.js';
-import { obdDinle, obdBagli, obdKaydiAc } from './obd-ekran.js';
+import { obdDinle, obdBagli, obdKaydiAc, ogrenmeDurumu, ogrenmeKaydet } from './obd-ekran.js';
+import { pencereBileseni, guncelle, hizGuncelle, OGRENME } from './core/ogrenme.js';
 import { servisAl, servisBirak, servisGuncelle, servisSoyle, servisVar, periyodik, konumDinle, eylemDinle, hataDinle } from './servis.js';
 
 const $ = id => document.getElementById(id);
@@ -92,6 +93,25 @@ function ciz() {
   if (d.bitti) soyle('bitti', 'Vardın. İyi günler.');
 }
 
+// Öğrenme penceresi: rota üstünde, şarjsız, ≥ 8 km'lik kesit. Gerçek ortalama hızla modelin bileşenleri
+// hesaplanır, ölçülen enerjiyle karşılaştırılır; araç çarpanları ve hız alışkanlığı güncellenir.
+function ogren(o) {
+  const w = c.pencere;
+  if (o.dcSarj || c.rotaDisi || !w) { c.pencere = { km: c.km, net: c.obd.net, t: o.t, soc: o.soc }; return; }
+  const km = c.km - w.km, saat = (o.t - w.t) / 3.6e6;
+  if (km < 8) return;
+  c.pencere = { km: c.km, net: c.obd.net, t: o.t, soc: o.soc };
+  const hiz = km / saat, y = c.obd.net - w.net;
+  if (km > OGRENME.pencereKm[1] * 2 || !(hiz > 8 && hiz < 170) || !(y > -3 && y < 12)) return;   // GPS kopması, sayaç atlaması
+  try {
+    const p = pencereBileseni(c.bolumler, c.k, w.km, c.km, hiz, (w.soc + o.soc) / 2);
+    let d = guncelle(ogrenmeDurumu(), { x: p.x, sabit: p.sabit, y, km });
+    const tip = c.bolumler.find(b => w.km >= b.basKm && w.km < b.basKm + b.km)?.tip;
+    if (tip && p.planHiz) d = hizGuncelle(d, tip, hiz, p.planHiz * (c.opt.hizKat || 1));
+    ogrenmeKaydet(d);
+  } catch { /* öğrenme hiçbir zaman sürüşü bozmaz */ }
+}
+
 async function planla(neden = '') {
   if (!c || c.planlaniyor) return;
   c.planlaniyor = true;
@@ -146,6 +166,7 @@ export function canliBaslat({ sonuc, varisSoc, hizKat, onIsitma, sicaklikTablosu
     c.obd = { t: o.t, soc: o.soc, gucKw: o.gucKw, T: o.bataryaMinT, dcSarj: o.dcSarj, net: (o.cedKwh ?? 0) - (o.cecKwh ?? 0) };
     // Şarj, ölçülen tüketim hesabını bozar: her şarjdan sonra ölçüm çıpası yenilenir.
     if (!c.obdBas || o.dcSarj) c.obdBas = { km: c.km, net: c.obd.net };
+    ogren(o);
     c.cipa = { km: c.km, soc: o.soc };
     ciz();
   });

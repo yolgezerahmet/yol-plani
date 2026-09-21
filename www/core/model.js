@@ -30,7 +30,10 @@ function yogunluk(k, rakim) {
 // k.ruzgarHizi (m/s, 10 m) + k.ruzgarYonu + b.yolYonu varsa rüzgâr vektörel çözülür;
 // yoksa eski tek sayılı k.ruzgar (km/h, karşıdan +) kullanılır.
 // b: bölüm parametreleri (rota motorundan) ya da {} — yolYonu, rakim, crrKat, ruzgarKat, akisOrani.
-export function whKm(tip, hiz, k, b = {}) {
+// Tüketimin üç fiziksel bileşeni (Wh/km): hava direnci (∝ v²), yuvarlanma (km başına sabit),
+// yardımcı yükler (∝ süre). k.ogren = { aero, yuv, yard } araçtan öğrenilen çarpanlardır (ogrenme.js);
+// yoksa 1. Bileşenler ayrı tutulur ki öğrenme hangi terimin saptığını ayırt edebilsin.
+export function whKmBilesen(tip, hiz, k, b = {}) {
   const t = TIP[tip], h = Math.max(5, hiz);
   const ruzgarKat = b.ruzgarKat ?? 1;
   const vekt = k.ruzgarHizi != null && b.yolYonu != null
@@ -44,7 +47,16 @@ export function whKm(tip, hiz, k, b = {}) {
   // Gece: hava servisi ışınımı 0 veriyorsa. Ölçü yoksa (elle senaryo) gündüz sayılır.
   const aks = aksesuarKw({ gece: k.gunes === 0, yagis: !!(k.yagis || k.kar), T: k.T }) + bataryaSogutmaKw(k.T);
   const yardimci = SABIT.temelKw + (k.ekYukKw || 0) + aks + iklimKw(k.T, { kabin: k.kabinC ?? SABIT.kabinC, gunes: k.gunes ?? null }) * (k.klimaKat ?? 1);
-  return (Fa + Fr) / 3.6 / k.verim * t.f + yardimci * 1000 / (h * (b.akisOrani ?? t.akis));
+  const o = k.ogren || {};
+  return {
+    aero: Fa / 3.6 / k.verim * t.f * (o.aero ?? 1),
+    yuv: Fr / 3.6 / k.verim * t.f * (o.yuv ?? 1),
+    yard: yardimci * 1000 / (h * (b.akisOrani ?? t.akis)) * (o.yard ?? 1),
+  };
+}
+export function whKm(tip, hiz, k, b = {}) {
+  const c = whKmBilesen(tip, hiz, k, b);
+  return c.aero + c.yuv + c.yard;
 }
 
 // Bir bölümün enerjisi (kWh), ortalama Wh/km ve süresi (dk). b: {tip, km, dh}

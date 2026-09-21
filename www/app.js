@@ -19,7 +19,8 @@ async function kgmBulteni() {
   return b;
 }
 import { yerAra, rotaGetir, rotaIstasyonlari, paketAc } from './core/servis.js';
-import { obdPaneli, kalibrasyon, olcumler } from './obd-ekran.js';
+import { obdPaneli, kalibrasyon, olcumler, ogrenmeDurumu } from './obd-ekran.js';
+import { ogrenilen, olculenSigma, ogrenmeOzeti } from './core/ogrenme.js';
 import { yolculukMaliyeti, evSarjiEtkisi, asimAyi, OPERATORLER, FIYAT_TARIHI, MESKEN_SINIRI } from './core/maliyet.js';
 import { enerjiAyristir, ayristirmaCumlesi } from './core/ayristir.js';
 import { v2lSure, CIHAZLAR, V2L_SINIR_KW } from './core/v2l.js';
@@ -123,6 +124,9 @@ $('planla').onclick = async () => {
   const kal = kalibrasyon();
   const k = { ...aracUygula({ ...VARSAYILAN, soc0: +$('soc').value, rezerv: 10 }, durum.arac, durum.soh),
               ...(kal?.tuketimKat ? { tuketimKat: kal.tuketimKat } : {}) };
+  // Öğrenen model hazırsa (≥ 8 ölçüm penceresi) bileşen çarpanları geçerli olur; kaba tek katsayı devre dışı kalır.
+  const og = ogrenilen(ogrenmeDurumu());
+  if (og) { k.ogren = og; delete k.tuketimKat; }
   // OBD'den ölçülen kullanılabilir kapasite, katalog değerinin makul aralığındaysa elle girilen sağlığın yerine geçer.
   if (kal?.kapasiteKwh && kal.kapasiteKwh > k.kap * 0.7 && kal.kapasiteKwh < k.kap * 1.08) k.kap = kal.kapasiteKwh;
   const kul = kullanimOku();
@@ -226,7 +230,7 @@ function ciz() {
   const m = s.maliyet;
   const cumle = ayristirmaCumlesi(enerjiAyristir(s.bolumler, s.k));
   // Belirsizlik: tek sayı yerine "%90 olasılıkla en az".
-  const sig = sigmaOrani({ kalibreYolculuk: kalibrasyon()?.yolculuk || 0, havaSenaryoKwh: (s.hava?.senaryo || []).map(x => x.kwh), toplamKwh: p.toplamKwh });
+  const sig = sigmaOrani({ olculen: olculenSigma(ogrenmeDurumu()), kalibreYolculuk: kalibrasyon()?.yolculuk || 0, havaSenaryoKwh: (s.hava?.senaryo || []).map(x => x.kwh), toplamKwh: p.toplamKwh });
   s.risk = bacakRiski(p, s.k, sig.toplam);
   const ek_ = s.risk.enKotu;
   const riskMetni = ek_ ? ` %90 olasılıkla ${n ? 'her durağa ve varışa' : 'varışa'} en az <strong>%${sayi(Math.max(0, ek_.p10))}</strong> ile ulaşırsın (en belirsiz bacak: ${kacis(ek_.ad)}, ±${sayi(ek_.sigma, 1)} puan).` : '';
@@ -290,6 +294,8 @@ function ciz() {
       `<li><b>${kacis(x.ozet)}</b>, yaklaşık ${sayi(x.kmAralik[0])}${x.kmAralik[1] - x.kmAralik[0] > 10 ? '–' + sayi(x.kmAralik[1]) : ''}. km${x.guclu ? '' : ' (yer adından eşlendi)'}.
        <details><summary>Bülten metni</summary><p class="kucuk">${kacis(x.metin)}</p></details></li>`).join('')}</ul></div>`);
   } else if (s.yol) u.push(`<p class="bilgi">KGM yol durumu bülteninde (${s.yol.tarih ? s.yol.tarih.split('-').reverse().join('.') : 'güncel'}) bu rotayla eşleşen çalışma ya da kapanma yok.</p>`);
+  const ogOzet = s.k.ogren ? ogrenmeOzeti(ogrenmeDurumu()) : null;
+  if (ogOzet) u.push(`<p class="bilgi">Bu plan senin aracına göre: ${kacis(ogOzet)}</p>`);
   if (s.risk?.enKotu && s.risk.enKotu.p10 < 5) u.push(`<p class="uyari">${kacis(s.risk.enKotu.ad)} bacağında pay dar: kötü senaryoda %${sayi(Math.max(0, s.risk.enKotu.p10))} ile varılabilir. Varış hedefini ya da rezervi yükseltmek planı daha güvenli yapar.</p>`);
   const ho = p.hizOneri;
   if (ho?.kazancDk >= 3 && ho.en.hizKat !== +$('hiz').value / 100)
