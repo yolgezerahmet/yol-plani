@@ -78,6 +78,46 @@ export function profil(edges) {
   });
 }
 
+// Valhalla polyline6 çözücü: [[enlem, boylam], ...]. Bölüm koordinatları buradan gelir;
+// hava tahmini ve istasyon araması bölümün gerçek yerini bilmek zorunda.
+export function cozPolyline(str, hassasiyet = 1e6) {
+  const nokta = []; let i = 0, lat = 0, lon = 0;
+  while (i < str.length) {
+    let sonuc = 0, kaydir = 0, b;
+    do { b = str.charCodeAt(i++) - 63; sonuc |= (b & 0x1f) << kaydir; kaydir += 5; } while (b >= 0x20);
+    lat += (sonuc & 1) ? ~(sonuc >> 1) : (sonuc >> 1);
+    sonuc = 0; kaydir = 0;
+    do { b = str.charCodeAt(i++) - 63; sonuc |= (b & 0x1f) << kaydir; kaydir += 5; } while (b >= 0x20);
+    lon += (sonuc & 1) ? ~(sonuc >> 1) : (sonuc >> 1);
+    nokta.push([lat / hassasiyet, lon / hassasiyet]);
+  }
+  return nokta;
+}
+
+// İki nokta arası büyük daire mesafesi (km).
+export function mesafeKm(a, b) {
+  const R = 6371, d = Math.PI / 180;
+  const dLat = (b[0] - a[0]) * d, dLon = (b[1] - a[1]) * d;
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * d) * Math.cos(b[0] * d) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+
+// Şekil üzerinde verilen km'deki noktayı bulur.
+export function noktaKmde(nokta, hedefKm) {
+  if (!nokta?.length) return null;
+  let km = 0;
+  for (let i = 1; i < nokta.length; i++) {
+    const d = mesafeKm(nokta[i - 1], nokta[i]);
+    if (km + d >= hedefKm) {
+      const t = d === 0 ? 0 : (hedefKm - km) / d;
+      return [nokta[i - 1][0] + (nokta[i][0] - nokta[i - 1][0]) * t,
+              nokta[i - 1][1] + (nokta[i][1] - nokta[i - 1][1]) * t];
+    }
+    km += d;
+  }
+  return nokta[nokta.length - 1];
+}
+
 // Açıların dairesel ağırlıklı ortalaması (0-360); rüzgâr izdüşümü için.
 export function ortalamaYon(acilar, agirliklar) {
   let x = 0, y = 0;
@@ -219,8 +259,10 @@ function bolumSinirlari(p, enKisa, enUzun) {
 }
 
 // Ana işlev: Valhalla verisinden tam parametreli model bölümleri.
+// shape verilirse (Valhalla polyline6) her bölüme orta noktasının koordinatı eklenir.
 export function bolumle(edges, ham_h, opt = {}) {
-  const { kutle = 2150, verim = 0.9, enKisa = AYAR.enKisaBolumKm, enUzun = AYAR.enUzunBolumKm } = opt;
+  const { kutle = 2150, verim = 0.9, enKisa = AYAR.enKisaBolumKm, enUzun = AYAR.enUzunBolumKm, shape = null } = opt;
+  const sekil = typeof shape === 'string' ? cozPolyline(shape) : shape;
   const p = profil(edges);
   if (!p.length) return { bolumler: [], olaylar: [], toplamKm: 0, ozet: {} };
 
@@ -250,7 +292,9 @@ export function bolumle(edges, ham_h, opt = {}) {
     // Hız çarpanı kenar kenar hesaplanıp ağırlıklı toplanır: kısa ama keskin viraj,
     // uzun düz kesimin ortalamasında kaybolmasın.
     const virajKat = agirlikli(e => virajHizKat(e.viraj));
+    const orta = sekil ? noktaKmde(sekil, (s.bas + s.son) / 2) : null;
     return {
+      enlem: orta ? +orta[0].toFixed(5) : null, boylam: orta ? +orta[1].toFixed(5) : null,
       no: i + 1, tip: s.tip, limit: s.limit, tahminiLimit: !s.etiketli,
       basKm: +s.bas.toFixed(1), km: +uzB.toFixed(1),
       yolYonu: Math.round(ortalamaYon(ic.map(e => e.yon), ic.map(pay))),
