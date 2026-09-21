@@ -5,6 +5,7 @@ import { havaGetir, havaUygula } from './core/hava.js';
 import { durakPlanla } from './core/plan.js';
 import { yerAra, rotaGetir, rotaIstasyonlari, paketAc } from './core/servis.js';
 import { obdPaneli, kalibrasyon } from './obd-ekran.js';
+import { googleRota, wazeHedef } from './core/nav.js';
 
 const $ = id => document.getElementById(id);
 const sayi = (x, b = 0) => Number(x).toLocaleString('tr-TR', { maximumFractionDigits: b, minimumFractionDigits: b });
@@ -168,6 +169,15 @@ function ciz() {
   const yas = Math.round((Date.now() - Date.parse(epdkPaketi.tarih)) / 864e5);
   if (yas > 21) u.push(`<p class="bilgi">İstasyon listesi ${yas} gün önce alındı; yeni açılan istasyonlar eksik olabilir.</p>`);
   $('uyarilar').innerHTML = u.join('');
+
+  // Yola çık: navigasyon Google Haritalar'da, şarj durakları ara nokta olarak.
+  const g = googleRota(durum.nereden, durum.nereye, p.duraklar);
+  $('yolaCik').href = g.url;
+  $('yolaCikNot').textContent = (n ? `${g.araNokta} şarj durağı ara nokta olarak eklenir.` : 'Şarj durağı yok; doğrudan varışa yönlendirir.')
+    + (g.kirpildi ? ' Haritalar en fazla 9 ara nokta aldığı için sonrakiler eklenmedi.' : '');
+  const ilk = p.duraklar[0]?.istasyon;
+  $('wazeIlk').hidden = !ilk;
+  if (ilk) $('wazeIlk').href = wazeHedef({ lat: ilk.enlem, lon: ilk.boylam });
 
   $('durakBaslik').hidden = !n;
   $('duraklar').innerHTML = p.duraklar.map(durakHtml).join('');

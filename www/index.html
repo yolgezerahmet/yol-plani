@@ -71,6 +71,9 @@ dl.degerler dt { color: var(--soluk); } dl.degerler dd { margin: 0; font: 600 15
 .ikincil:disabled { opacity: .45; }
 pre.ham { font-size: 11px; max-height: 160px; overflow: auto; background: var(--kagit); border-radius: 8px; padding: 8px; white-space: pre-wrap; }
 .kucuk { font-size: 13px; color: var(--soluk); }
+.yola { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin: 18px 0 4px; }
+.yola a { text-align: center; line-height: 1.15; display: flex; align-items: center; justify-content: center; text-decoration: none; min-height: 52px; }
+.yola .planla { background: var(--batarya); color: #fff; }
 input[type=range] { width: 100%; accent-color: var(--batarya); margin: 6px 0 0; }
 .planla { width: 100%; font: 600 19px var(--sayi); color: var(--kagit); background: var(--murekkep);
   border: 0; border-radius: 12px; padding: 14px; min-height: 52px; }
@@ -163,6 +166,11 @@ dialog output { float: right; font: 600 18px var(--sayi); color: var(--murekkep)
     <div class="secim" id="secim" role="group" aria-label="Rota seçenekleri"></div>
     <figure class="profil" id="profil"></figure>
     <p class="ozet" id="ozet"></p>
+    <div class="yola">
+      <a class="planla" id="yolaCik" target="_blank" rel="noopener">Google Haritalar'da yola çık</a>
+      <a class="ikincil" id="wazeIlk" target="_blank" rel="noopener" aria-label="İlk durağa Waze ile git">Waze<br>1. durak</a>
+    </div>
+    <p class="kucuk" id="yolaCikNot"></p>
     <div id="uyarilar"></div>
     <h2 id="durakBaslik">Şarj durakları</h2>
     <ol class="duraklar" id="duraklar"></ol>
