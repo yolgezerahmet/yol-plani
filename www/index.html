@@ -174,6 +174,10 @@ dialog output { float: right; font: 600 18px var(--sayi); color: var(--murekkep)
       <input id="soc" type="range" min="20" max="100" step="1" value="90"></label>
     <label>Varışta en az <output id="varisOut"></output>
       <input id="varis" type="range" min="5" max="50" step="1" value="15"></label>
+    <label>Durağa en az <output id="durakVarisOut"></output>
+      <input id="durakVaris" type="range" min="5" max="30" step="1" value="10"></label>
+    <label>Durakta en çok <output id="enYuksekOut"></output>
+      <input id="enYuksek" type="range" min="60" max="100" step="5" value="95"></label>
     <label class="genis">Hız, sınırın <output id="hizOut"></output>
       <input id="hiz" type="range" min="80" max="110" step="5" value="100"></label>
     <label class="genis">Çıkış zamanı
@@ -185,6 +189,7 @@ dialog output { float: right; font: 600 18px var(--sayi); color: var(--murekkep)
         <option value="18">Isıtmalı garajda</option>
       </select></label>
     <label class="onay"><input id="onIsitma" type="checkbox" checked> Ön ısıtma kullanacağım</label>
+    <label class="onay genis"><input id="dayanikli" type="checkbox" checked> İstasyon bozuk çıkarsa yedeğe yetecek şekilde planla</label>
     <details class="genis kullanim"><summary>Yük, lastik ve klima</summary>
       <div class="ayar ic">
         <label>Kişi sayısı <select id="kisi"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></label>

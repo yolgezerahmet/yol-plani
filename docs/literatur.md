@@ -35,9 +35,9 @@ literatüre göre iyimserdi; %6–8'e çekildi ve araç kendi ölçülmüş hata
 - Baum, Dibbelt, Gemsa, Wagner, Zündorf (2019), *Transportation Science* 53(6):1627–1655. Şarj duraklı, gerçekçi
   şarj eğrili toplam süre en küçüklemesi (CHArge); kıta ölçeğinde en iyi çözüm.
 
-**Durum: kısmen.** En iyi plan (dinamik programlama) ve yedek istasyonlar var; ölçülmüş şarj gücü yerelde tutuluyor.
-**Sıradaki:** planlayıcıya arıza olasılığı koymak: her durak için "çalışmazsa yedeğe rezervle ulaşılır mı" koşulu ve
-beklenen süre = şarj + p(arıza) × yedeğe sapma. Soket sayısı ve kendi ölçümlerimiz p'yi belirler. Türkiye için p bilinmiyor; ölçülmeli.
+**Durum: yapıldı.** Planlayıcıda arıza yedeği koşulu ve beklenen arıza maliyeti var (`core/optimum.js`); p soket
+sayısından ve kendi ölçümlerimizden gelir. Türkiye için p bilinmiyor [T]; yerel ölçümler biriktikçe düzeltilecek.
+**Sıradaki:** ölçümlerin (izinle, anonim) paylaşılması; doluluk/sıra beklentisi.
 
 ## 4. Batarya sağlığı
 - Geotab (Ocak 2026), 22.700 araç, 21 model: ortalama yıllık kapasite kaybı %2,3. 100 kW üstü DC'yi yoğun kullananlarda

@@ -27,7 +27,8 @@ test('en iyi plan açgözlüden hiç kötü değil ve kurallara uyuyor (çok rot
     for (let km = 25 + (t * 7) % 30; km < n * 50 - 10; km += 35 + ((km * 13 + t) % 45)) ist.push(st(km, [50, 60, 120, 150, 180, 240, 350][(km + t) % 7]));
     const bb = bol(n);
     const g = durakPlanla(bb, ist, k, { varisSoc: 15, onIsitma: false });
-    const oo = durakOptimum(bb, ist, k, { varisSoc: 15, onIsitma: false });
+    // Adil kıyas: açgözlü yöntem arıza yedeği koşulu taşımaz; o koşul ayrı testte.
+    const oo = durakOptimum(bb, ist, k, { varisSoc: 15, onIsitma: false, dayanikli: false, arizaSabitDk: 0 });
     if (g.sorun) continue;
     assert.ok(!oo.sorun, `t=${t}: optimum çözüm bulamadı`);
     assert.ok(kurallara(oo, k, 15), `t=${t}: kural ihlali ${JSON.stringify(oo.duraklar.map(d => [d.km, d.varisSoc, d.hedefSoc]))}`);
@@ -72,4 +73,44 @@ test('hız önerisi toplam süreyi karşılaştırır', () => {
   assert.equal(h.liste.length, 5);
   assert.ok(h.en.toplamDk <= h.liste[2].toplamDk);
   assert.ok(h.kazancDk >= 0);
+});
+
+import { arizaOlasiligi } from '../www/core/optimum.js';
+
+test('arıza olasılığı: soket sayısı azaltır, kendi düşük ölçümün artırır', () => {
+  const p1 = arizaOlasiligi({ no: 'a', soketSayisi: 1 }), p2 = arizaOlasiligi({ no: 'a', soketSayisi: 2 }), p6 = arizaOlasiligi({ no: 'a', soketSayisi: 6 });
+  assert.ok(p1 > 0.25 && p1 < 0.3); assert.ok(p2 < 0.1); assert.ok(p6 < 0.035);
+  assert.ok(arizaOlasiligi({ no: 'a', soketSayisi: 2 }, [{ istasyonNo: 'a', bas: 1, dusuk: true }]) > p2 * 1.9);
+  assert.ok(arizaOlasiligi({ no: 'a', soketSayisi: 2 }, [{ istasyonNo: 'a', bas: 1, dusuk: false }]) < p2);
+});
+
+test('dayanıklı plan: her durakta yedeğe rezervle ulaşılır; yalnız istasyon seçilmez', () => {
+  // 150'de tek başına güçlü istasyon (yedeği 95 km ileride), 170 ve 182'de iki orta istasyon
+  const ist = [st(150, 350, { soketSayisi: 1 }), st(170, 180, { soketSayisi: 4 }), st(182, 150, { soketSayisi: 4 }), st(245, 180), st(256, 180), st(330, 180), st(338, 150)];
+  const kk = { ...k, soc0: 70, rezerv: 10 };
+  const d = durakOptimum(bol(8), ist, kk, { varisSoc: 15, onIsitma: false });
+  assert.equal(d.dayaniklilik, 'tam');
+  for (const x of d.duraklar) {
+    assert.ok(x.ariza.yedek, 'yedek yok: ' + x.km);
+    assert.ok(x.ariza.yedekVarisSoc >= 3 - 0.6, `${x.km}: yedeğe %${x.ariza.yedekVarisSoc}`);
+    assert.ok(x.varisSoc >= kk.rezerv - 0.6);
+  }
+  const serbest = durakOptimum(bol(8), ist, kk, { varisSoc: 15, onIsitma: false, dayanikli: false });
+  assert.equal(serbest.dayaniklilik, 'kapali');
+  assert.ok(serbest.toplamDk <= d.toplamDk + 1);                     // dayanıklılığın bedeli süreyle ölçülür
+});
+
+test('dayanıklı çözüm yoksa koşulsuz plana düşer ve bunu söyler', () => {
+  const d = durakOptimum(bol(8), [st(200, 350)], k, { varisSoc: 15, onIsitma: false });
+  assert.equal(d.dayaniklilik, 'yok'); assert.equal(d.duraklar.length, 1);
+  assert.equal(d.duraklar[0].ariza.yedek, null);
+});
+
+test('durağa varış alt sınırı kullanıcıdan: %20 istenirse her durağa en az %20 ile varılır', () => {
+  const ist = [60, 100, 140, 180, 220, 260, 300, 340, 380].flatMap(x => [st(x, 180), st(x + 6, 150)]);
+  const d10 = durakOptimum(bol(8), ist, { ...k, rezerv: 10 }, { varisSoc: 15, onIsitma: false });
+  const d20 = durakOptimum(bol(8), ist, { ...k, rezerv: 20 }, { varisSoc: 25, onIsitma: false, enYuksekSoc: 80 });
+  assert.ok(d20.duraklar.every(x => x.varisSoc >= 19.4 && x.hedefSoc <= 80), JSON.stringify(d20.duraklar.map(x => [x.varisSoc, x.hedefSoc])));
+  assert.ok(d20.varisSoc >= 24.4);
+  assert.ok(d20.toplamDk >= d10.toplamDk);
 });

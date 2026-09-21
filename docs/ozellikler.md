@@ -172,3 +172,15 @@ gerçek ortalama hızla hesapladığı üç bileşen (hava direnci, yuvarlanma, 
 üç çarpan güncellenir. 8 pencereden sonra plan bu çarpanları kullanır ve kaba tek katsayı devre dışı kalır.
 Aykırı pencereler (4σ) atılır, çarpanlar 0,7–1,5 arasında tutulur. Sürücünün yol tipine göre hız alışkanlığı ayrı öğrenilir
 (henüz yalnız raporlanıyor). Ölçülen artık hata, risk hesabındaki varsayımın yerini alır. Dayanaklar: `docs/literatur.md`.
+
+## Batarya hedefleri ve arızaya dayanıklı plan (Eylül 2026)
+- **Üç ayrı hedef:** varışta en az (%5–50), şarj durağına en az (%5–30, eskiden sabit %10), durakta en çok (%60–100).
+  Tercihler telefonda hatırlanır. Yolda modundaki yeniden planlama aynı hedefleri kullanır.
+- **Arıza yedeği koşulu:** her durak için, o durağa varılan bataryayla ulaşılabilecek en yakın başka istasyon aranır
+  (15 km geriye, 80 km ileriye). Koşul: yedeğe en az %3 ile varılmalı. Sağlanmıyorsa o durak seçilmez.
+  Hiçbir dizi sağlamıyorsa koşulsuz plan kurulur ve ekranda söylenir.
+- **Beklenen arıza maliyeti:** amaç fonksiyonuna p(arıza) × (10 dk + yedeğe sapma) eklenir. p soket sayısından:
+  tek soket ≈ %27, iki ≈ %9, dört ≈ %3,4 [T; dayanak Rempel ve ark. 2023, Türkiye için ölçüm yok]. Kendi ölçümün
+  o istasyonda düşük güç gösterdiyse p iki katına çıkar, normal gösterdiyse yarıya iner.
+- 200 rastgele rotada dayanıklılığın bedeli: ortalama 1,5 dk, ortanca 1 dk, %90'lık dilim 4 dk.
+- Durak kartı: "Çalışmazsa: X, 12 km ileride; oraya %9 ile varırsın." Tek soketli istasyon ayrıca belirtilir.

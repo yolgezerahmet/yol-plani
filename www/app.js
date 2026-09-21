@@ -90,9 +90,18 @@ function yerKutusu(alan) {
 yerKutusu('nereden'); yerKutusu('nereye');
 
 // ---- Kaydırıcılar ----------------------------------------------------------
-const kaydirici = (id, bicim) => { const f = () => { $(id + 'Out').value = bicim($(id).value); }; $(id).oninput = f; f(); };
+// Tercih kaydırıcıları (varış, durağa varış, en çok dolum) bir sonraki açılışta hatırlanır; batarya düzeyi hatırlanmaz.
+const HATIRLA = new Set(['varis', 'durakVaris', 'enYuksek', 'hiz']);
+const kaydirici = (id, bicim) => {
+  if (HATIRLA.has(id)) { const v = depo.al('ayar:' + id, null); if (v != null) $(id).value = v; }
+  const f = () => { $(id + 'Out').value = bicim($(id).value); if (HATIRLA.has(id)) depo.koy('ayar:' + id, +$(id).value); };
+  $(id).oninput = f; f();
+};
 kaydirici('soc', v => '%' + v);
 kaydirici('varis', v => '%' + v);
+kaydirici('durakVaris', v => '%' + v);
+kaydirici('enYuksek', v => '%' + v);
+$('dayanikli').checked = depo.al('dayanikli', true);
 kaydirici('hiz', v => '%' + v);
 const yarin = new Date(); yarin.setDate(yarin.getDate() + 1); yarin.setHours(8, 0, 0, 0);
 $('cikis').value = new Date(yarin - yarin.getTimezoneOffset() * 6e4).toISOString().slice(0, 16);
@@ -122,7 +131,7 @@ $('planla').onclick = async () => {
   const btn = $('planla'); btn.disabled = true;
   const hizKat = +$('hiz').value / 100;
   const kal = kalibrasyon();
-  const k = { ...aracUygula({ ...VARSAYILAN, soc0: +$('soc').value, rezerv: 10 }, durum.arac, durum.soh),
+  const k = { ...aracUygula({ ...VARSAYILAN, soc0: +$('soc').value, rezerv: +$('durakVaris').value }, durum.arac, durum.soh),
               ...(kal?.tuketimKat ? { tuketimKat: kal.tuketimKat } : {}) };
   // Öğrenen model hazırsa (≥ 8 ölçüm penceresi) bileşen çarpanları geçerli olur; kaba tek katsayı devre dışı kalır.
   const og = ogrenilen(ogrenmeDurumu());
@@ -132,7 +141,7 @@ $('planla').onclick = async () => {
   const kul = kullanimOku();
   Object.assign(k, kullanimUygula(k, kul));
   const garaj = $('garaj').value, onIsitma = $('onIsitma').checked;
-  depo.koy('garaj', garaj); depo.koy('onIsitma', onIsitma);
+  depo.koy('garaj', garaj); depo.koy('onIsitma', onIsitma); depo.koy('dayanikli', $('dayanikli').checked);
   const varisSoc = +$('varis').value;
   const cikisMs = new Date($('cikis').value).getTime() || Date.now();
   try {
@@ -178,12 +187,14 @@ $('planla').onclick = async () => {
       const ist = { istasyonlar: rotaIstasyonlari(r.sekil, pk.istasyonlar) };
       const planOpt = {
         hizKat, varisSoc, onIsitma,
+        enYuksekSoc: +$('enYuksek').value, dayanikli: $('dayanikli').checked, olcumler: olcumler(),
         bataryaT0: garaj === '' ? undefined : +garaj,
         sicaklikTablosu: kal?.sicaklikTablosu || undefined,
       };
       // En iyi plan (dinamik programlama); açgözlü yalnız kıyas için.
       const plan = durakOptimum(bolumler, ist.istasyonlar, kr, { ...planOpt, saatTl: durum.hesap.saatTl || null, fiyat: durum.hesap.fiyat });
       const acgozlu = durakPlanla(bolumler, ist.istasyonlar, kr, planOpt);
+      plan.planOpt = { ...planOpt, saatTl: durum.hesap.saatTl || null, fiyat: durum.hesap.fiyat };
       plan.kazancDk = acgozlu.sorun ? null : acgozlu.toplamDk - plan.toplamDk;
       const hiz = hizOnerisi(bolumler, ist.istasyonlar, kr, { ...planOpt, saatTl: durum.hesap.saatTl || null, fiyat: durum.hesap.fiyat });
       plan.hizOneri = hiz;
@@ -300,6 +311,7 @@ function ciz() {
   const ho = p.hizOneri;
   if (ho?.kazancDk >= 3 && ho.en.hizKat !== +$('hiz').value / 100)
     u.push(`<p class="bilgi">Hızı limitin %${Math.round(ho.en.hizKat * 100)}'ine ${ho.en.hizKat > +$('hiz').value / 100 ? 'çıkarırsan' : 'indirirsen'} toplam yolculuk ${ho.kazancDk} dk kısalır (${ho.en.durak} durak, varışta %${sayi(ho.en.varis)}).</p>`);
+  if (p.dayaniklilik === 'yok') u.push(`<p class="uyari">Bu rotada her durak için ulaşılabilir bir yedek bulunamadı. Plan yine de kuruldu; yedeği olmayan duraklar kartlarında belirtiliyor. Durağa varış alt sınırını yükseltmek ya da daha yavaş gitmek seçenek açabilir.</p>`);
   if (p.kazancDk >= 3) u.push(`<p class="bilgi">Durak seçimi ve şarj miktarları bütün olasılıklar karşılaştırılarak belirlendi; basit "her durakta %80'e doldur" yaklaşımına göre ${p.kazancDk} dk daha kısa.</p>`);
   if (m.ucretliKm >= 5) u.push(`<p class="bilgi">Rotanın ${sayi(m.ucretliKm)} km'si ücretli yol (otoyol, köprü ya da tünel); geçiş ücreti şarj maliyetine eklenmedi.</p>`);
   if (m.tahminVar) u.push(`<p class="bilgi">Bazı operatörlerin fiyatı bilinmiyor; tahmini değer kullanıldı. Hesap menüsünden kendi fiyatını girebilirsin.</p>`);
@@ -319,7 +331,7 @@ function ciz() {
     const hizKat = +$('hiz').value / 100;
     const sureFn = b => b.km / Math.max(5, b.hiz * hizKat * (b.akisOrani || 0.9)) * 60 + (b.olayDk || 0);
     canliBaslat({
-      sonuc: s, varisSoc: +$('varis').value, hizKat, onIsitma: $('onIsitma').checked, sicaklikTablosu: kalibrasyon()?.sicaklikTablosu || undefined,
+      sonuc: s, ekOpt: s.plan.planOpt, varisSoc: +$('varis').value, hizKat, onIsitma: $('onIsitma').checked, sicaklikTablosu: kalibrasyon()?.sicaklikTablosu || undefined,
       varisUrl: googleRota(durum.nereden, durum.nereye, []).url,
       havaTazele: async kalan => havaUygula(kalan, await havaGetir(kalan), Date.now(), sureFn),
       yeniPlan: y => { s.plan = { ...y, termal: y.termal ?? s.plan.termal }; },
@@ -342,6 +354,11 @@ function durakHtml(d, f, olc = []) {
   const i = d.istasyon;
   const fiyat = f ? `${kacis(f.ad)}, yaklaşık ${sayi(f.tutar)} TL (${sayi(f.tl, 2)} TL/kWh${f.kaynak === 'senin' ? ', senin fiyatın' : f.kaynak === 'tahmin' ? ', tahmini' : ''}).`
     + (f.isgaliyeDk ? ` Şarj bitince aracı çek; dolu kalan her dakika yaklaşık ${sayi(f.isgaliyeDk)} TL işgaliye.` : '') : `${kacis(i.operator || '')}.`;
+  const a = d.ariza;
+  const ariza = !a ? '' : a.yedek
+    ? `<p class="not${a.yedekVarisSoc < 5 ? ' dikkat' : ''}">Çalışmazsa: ${kacis(a.yedek.marka || '')} ${kacis(a.yedek.ad)}, ${Math.abs(a.yedekKm) < 1 ? 'hemen yanında' : a.yedekKm > 0 ? sayi(a.yedekKm) + ' km ileride' : sayi(-a.yedekKm) + ' km geride'}; oraya %${sayi(a.yedekVarisSoc)} ile varırsın.`
+      + (i.soketSayisi <= 1 ? ' Tek soketli istasyon: dolu ya da arızalı çıkma olasılığı yüksek.' : '') + '</p>'
+    : `<p class="not dikkat">Bu durağın, vardığın bataryayla ulaşabileceğin bir yedeği yok. Yola çıkmadan istasyonun çalıştığını uygulamasından kontrol et.</p>`;
   const bu = olc.filter(o => o.istasyonNo === i.no).sort((a, b) => b.bas - a.bas)[0];
   const olcum = bu ? `<p class="not${bu.dusuk ? ' dikkat' : ''}">Senin ölçümün (${bu.tarih}): en yüksek ${sayi(bu.tepeKw)} kW`
     + (bu.dusuk ? `, bu sıcaklıkta beklenenin %${sayi(bu.beklenenOran * 100)}'i. Yedeği göz önünde tut.` : ', beklendiği gibi.') + '</p>' : '';
@@ -349,13 +366,13 @@ function durakHtml(d, f, olc = []) {
   const yedek = d.yedekler?.length
     ? `<details class="yedek"><summary>Olmazsa ${d.yedekler.length} yedek</summary><ul>${d.yedekler.map(y =>
         `<li>${sayi(y.rotaKm)}. km, ${kacis(y.marka || y.ad)} ${sayi(y.kw)} kW${y.sapmaKm > 1 ? `, yoldan ${sayi(y.sapmaKm, 1)} km` : ''}. ${haritaLink(y, 'Aç')}</li>`).join('')}</ul></details>`
-    : `<p class="not dikkat">Bu durağın ulaşılabilir yedeği yok.</p>`;
+    : (d.ariza ? '' : `<p class="not dikkat">Bu durağın ulaşılabilir yedeği yok.</p>`);   // arıza yedeği satırı varsa o geçerli
   return `<li class="durak">
     <div class="km">${sayi(d.km)}. km${i.sapmaKm > 0.5 ? `, yoldan ${sayi(i.sapmaKm, 1)} km` : ''}, ${kacis(i.il || '')}</div>
     <div class="ad">${kacis(i.marka || '')} ${kacis(i.ad)}</div>
     <div class="sarj">%${sayi(d.varisSoc)} → %${d.hedefSoc} <span>${d.dk} dk, ${sayi(d.ekKwh, 1)} kWh, ${sayi(i.kw)} kW × ${i.soketSayisi || 1}</span></div>
     ${isiSatiri(d)}
-    ${olcum}
+    ${ariza}${olcum}
     <p class="not">${fiyat}${konum} ${haritaLink(i)}</p>
     ${yedek}</li>`;
 }

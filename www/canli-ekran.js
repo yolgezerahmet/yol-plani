@@ -141,10 +141,10 @@ async function planla(neden = '') {
   } finally { c.planlaniyor = false; ciz(); }
 }
 
-export function canliBaslat({ sonuc, varisSoc, hizKat, onIsitma, sicaklikTablosu, havaTazele, varisUrl, yeniPlan, buradanPlanla }) {
+export function canliBaslat({ sonuc, ekOpt = {}, varisSoc, hizKat, onIsitma, sicaklikTablosu, havaTazele, varisUrl, yeniPlan, buradanPlanla }) {
   canliBitir();
   c = { plan: sonuc.plan, bolumler: sonuc.bolumler, istasyonlar: sonuc.ist.istasyonlar, k: sonuc.k, sekil: sonuc.rota.sekil, varisSoc,
-        opt: { hizKat, varisSoc, onIsitma, sicaklikTablosu }, havaTazele, varisUrl, yeniPlan,
+        opt: { ...ekOpt, hizKat, varisSoc, onIsitma, sicaklikTablosu }, havaTazele, varisUrl, yeniPlan,
         km: 0, kat: 1, rotaDisi: false, cipa: { km: 0, soc: sonuc.k.soc0 }, obd: null, obdBas: null,
         soylenen: new Set(), otomatik: new Set(), ses: true, havaT: Date.now(), planNotu: '' };
   $('canli').hidden = false; document.body.classList.add('canli-acik');
