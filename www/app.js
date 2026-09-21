@@ -4,7 +4,10 @@ import { ARACLAR, VARSAYILAN_ARAC, aracUygula } from './core/arac.js';
 import { havaGetir, havaUygula } from './core/hava.js';
 import { durakPlanla } from './core/plan.js';
 import { yerAra, rotaGetir, rotaIstasyonlari, paketAc } from './core/servis.js';
-import { obdPaneli, kalibrasyon } from './obd-ekran.js';
+import { obdPaneli, kalibrasyon, olcumler } from './obd-ekran.js';
+import { yolculukMaliyeti, evSarjiEtkisi, asimAyi, OPERATORLER, FIYAT_TARIHI, MESKEN_SINIRI } from './core/maliyet.js';
+import { enerjiAyristir, ayristirmaCumlesi } from './core/ayristir.js';
+import { v2lSure, CIHAZLAR, V2L_SINIR_KW } from './core/v2l.js';
 import { googleRota, wazeHedef } from './core/nav.js';
 
 const $ = id => document.getElementById(id);
@@ -22,6 +25,7 @@ const durum = {
   nereden: depo.al('nereden', { ad: 'Ayrancı, Çankaya, Ankara', lat: 39.8985, lon: 32.8617 }),
   nereye: depo.al('nereye', { ad: 'Kahramanmaraş', lat: 37.5753, lon: 36.9228 }),
   sonuclar: [], secili: 0,
+  hesap: depo.al('hesap', { evTl: null, fiyat: {}, evYillik: null, yillikKm: 15000, evPay: 80, v2l: { soc: 80, alt: 20, secili: ['buzdolabi', 'modem', 'lamba', 'telefon'] } }),
 };
 
 // ---- Araç -----------------------------------------------------------------
@@ -156,9 +160,18 @@ function ciz() {
   if (yol) yol.style.setProperty('--uz', Math.ceil(yol.getTotalLength()));
 
   const n = p.duraklar.length;
+  const alinan = p.duraklar.reduce((t, d) => t + d.ekKwh, 0);
+  const evTl = durum.hesap.evTl || null;
+  s.maliyet = yolculukMaliyeti(p, { bolumler: s.bolumler, kullanici: durum.hesap.fiyat, evTl, baslangicKwh: Math.max(0, p.toplamKwh - alinan) });
+  const m = s.maliyet;
+  const cumle = ayristirmaCumlesi(enerjiAyristir(s.bolumler, s.k));
+  const maliyetMetni = n
+    ? ` Şarj maliyeti yaklaşık <strong>${sayi(m.sarjTl)} TL</strong>${m.evTutar != null ? `, evde doldurduğun kısımla birlikte ${sayi(m.toplamTl)} TL (km başı ${sayi(m.kmBasiTl, 2)} TL)` : ''}.`
+    : (m.evTutar != null ? ` Enerji maliyeti yaklaşık ${sayi(m.evTutar)} TL (ev elektriği).` : '');
   $('ozet').innerHTML = `<strong>${sure(p.toplamDk)}</strong> yolculuk, ${n ? `<strong>${n}</strong> şarj durağı (${sure(p.sarjDk)})` : 'şarj durağı yok'}, varışta <strong>%${sayi(p.varisSoc)}</strong>. `
     + `Ortalama ${sayi(p.ortWh)} Wh/km, toplam ${sayi(p.toplamKwh, 1)} kWh.`
-    + (p.termal?.onIsitmaKazanciDk >= 3 ? ` Ön ısıtma şarj süresini ${p.termal.onIsitmaKazanciDk} dk kısaltıyor.` : '');
+    + (p.termal?.onIsitmaKazanciDk >= 3 ? ` Ön ısıtma şarj süresini ${p.termal.onIsitmaKazanciDk} dk kısaltıyor.` : '')
+    + maliyetMetni + (cumle ? ' ' + cumle : '');
 
   const u = [];
   if (p.sorun) u.push(`<p class="uyari">${kacis(p.sorun.mesaj)}. Menzili uzatmak için hızı düşürmeyi ya da çıkış bataryasını artırmayı deneyin.</p>`);
@@ -168,6 +181,8 @@ function ciz() {
   if (tl > 20) u.push(`<p class="bilgi">${sayi(tl)} km'de hız sınırı haritada etiketli değil; yol türünden tahmin edildi.</p>`);
   const yas = Math.round((Date.now() - Date.parse(epdkPaketi.tarih)) / 864e5);
   if (yas > 21) u.push(`<p class="bilgi">İstasyon listesi ${yas} gün önce alındı; yeni açılan istasyonlar eksik olabilir.</p>`);
+  if (m.ucretliKm >= 5) u.push(`<p class="bilgi">Rotanın ${sayi(m.ucretliKm)} km'si ücretli yol (otoyol, köprü ya da tünel); geçiş ücreti şarj maliyetine eklenmedi.</p>`);
+  if (m.tahminVar) u.push(`<p class="bilgi">Bazı operatörlerin fiyatı bilinmiyor; tahmini değer kullanıldı. Hesap menüsünden kendi fiyatını girebilirsin.</p>`);
   $('uyarilar').innerHTML = u.join('');
 
   // Yola çık: navigasyon Google Haritalar'da, şarj durakları ara nokta olarak.
@@ -180,7 +195,8 @@ function ciz() {
   if (ilk) $('wazeIlk').href = wazeHedef({ lat: ilk.enlem, lon: ilk.boylam });
 
   $('durakBaslik').hidden = !n;
-  $('duraklar').innerHTML = p.duraklar.map(durakHtml).join('');
+  const olc = olcumler();
+  $('duraklar').innerHTML = p.duraklar.map((d, i) => durakHtml(d, m.duraklar[i], olc)).join('');
   $('bolumler').innerHTML = bolumTablosu(s);
   $('kaynak').textContent = `Rota ve rakım: Valhalla (OpenStreetMap). Hava: Open-Meteo. İstasyonlar ve konumları: EPDK şarj istasyonları servisi, ${epdkPaketi.tarih}. Müsaitlik canlı değildir.`;
 }
@@ -189,8 +205,13 @@ function ciz() {
 const haritaLink = (i, metin = 'Haritada aç') =>
   `<a class="harita" href="geo:${i.enlem},${i.boylam}?q=${i.enlem},${i.boylam}(${encodeURIComponent(i.ad)})">${metin}</a>`;
 
-function durakHtml(d) {
+function durakHtml(d, f, olc = []) {
   const i = d.istasyon;
+  const fiyat = f ? `${kacis(f.ad)}, yaklaşık ${sayi(f.tutar)} TL (${sayi(f.tl, 2)} TL/kWh${f.kaynak === 'senin' ? ', senin fiyatın' : f.kaynak === 'tahmin' ? ', tahmini' : ''}).`
+    + (f.isgaliyeDk ? ` Şarj bitince aracı çek; dolu kalan her dakika yaklaşık ${sayi(f.isgaliyeDk)} TL işgaliye.` : '') : `${kacis(i.operator || '')}.`;
+  const bu = olc.filter(o => o.istasyonNo === i.no).sort((a, b) => b.bas - a.bas)[0];
+  const olcum = bu ? `<p class="not${bu.dusuk ? ' dikkat' : ''}">Senin ölçümün (${bu.tarih}): en yüksek ${sayi(bu.tepeKw)} kW`
+    + (bu.dusuk ? `, bu sıcaklıkta beklenenin %${sayi(bu.beklenenOran * 100)}'i. Yedeği göz önünde tut.` : ', beklendiği gibi.') + '</p>' : '';
   const konum = i.konum === 'kesin' ? '' : ' Konum yaklaşık.';
   const yedek = d.yedekler?.length
     ? `<details class="yedek"><summary>Olmazsa ${d.yedekler.length} yedek</summary><ul>${d.yedekler.map(y =>
@@ -201,7 +222,8 @@ function durakHtml(d) {
     <div class="ad">${kacis(i.marka || '')} ${kacis(i.ad)}</div>
     <div class="sarj">%${sayi(d.varisSoc)} → %${d.hedefSoc} <span>${d.dk} dk, ${sayi(d.ekKwh, 1)} kWh, ${sayi(i.kw)} kW × ${i.soketSayisi || 1}</span></div>
     ${isiSatiri(d)}
-    <p class="not">${kacis(i.operator || '')}.${konum} ${haritaLink(i)}</p>
+    ${olcum}
+    <p class="not">${fiyat}${konum} ${haritaLink(i)}</p>
     ${yedek}</li>`;
 }
 
@@ -259,5 +281,73 @@ function profilSvg(s) {
 
 $('garaj').value = depo.al('garaj', '');
 $('onIsitma').checked = depo.al('onIsitma', true);
-obdPaneli({ planGetir: () => durum.sonuclar[durum.secili]?.plan, olcekGetir: () => ARACLAR[durum.arac].sarjOlcek });
+obdPaneli({ planGetir: () => durum.sonuclar[durum.secili]?.plan, olcekGetir: () => ARACLAR[durum.arac].sarjOlcek,
+            istasyonlarGetir: async () => (await paket()).istasyonlar });
+
+// ---- Hesap: şarj fiyatları, ev elektriği, V2L ---------------------------------
+const hesapKaydet = () => depo.koy('hesap', durum.hesap);
+const sayiOku = v => { const x = parseFloat(String(v).replace(',', '.')); return Number.isFinite(x) && x > 0 ? x : null; };
+
+function fiyatListesi() {
+  $('fiyatlar').innerHTML = OPERATORLER.map(o => `<label class="satir">${kacis(o.ad)}
+    <input type="text" inputmode="decimal" data-op="${kacis(o.ad)}" placeholder="${o.dc != null ? sayi(o.dc, 2) : '–'}" value="${durum.hesap.fiyat[o.ad] != null ? sayi(durum.hesap.fiyat[o.ad], 2) : ''}"></label>`).join('');
+  $('fiyatNot').textContent = `Soluk yazılan değerler ${FIYAT_TARIHI} dolaylarında derlenmiş yaklaşık DC fiyatlarıdır; operatörler fiyatı sık değiştiriyor. Kendi uygulamanda gördüğün fiyatı yazarsan o kullanılır.`;
+}
+$('fiyatlar').oninput = e => {
+  const op = e.target.dataset.op; if (!op) return;
+  const v = sayiOku(e.target.value);
+  if (v == null) delete durum.hesap.fiyat[op]; else durum.hesap.fiyat[op] = v;
+  hesapKaydet();
+};
+
+function evHesabi() {
+  const h = durum.hesap;
+  $('evTl').value = h.evTl != null ? sayi(h.evTl, 2) : '';
+  $('evYillik').value = h.evYillik ?? ''; $('yillikKm').value = h.yillikKm ?? '';
+  $('evPay').value = h.evPay; $('evPayOut').value = '%' + h.evPay;
+  if (!h.evYillik || !h.yillikKm) { $('evSonuc').innerHTML = 'Faturadaki son 12 ayın toplamını (araç hariç) ve yıllık km\'ni yaz.'; return; }
+  // Yıllık karma kullanım (şehir + yol) için yaklaşık 170 Wh/km [T]; OBD yolculukları biriktikçe ölçülene çekilebilir.
+  const r = evSarjiEtkisi({ evYillikKwh: h.evYillik, aracYillikKm: h.yillikKm, whKm: 170, evPayi: h.evPay / 100 });
+  const ay = new Date().getMonth() + 1;
+  const a = asimAyi({ buYilKwh: (h.evYillik + r.aracKwh) * (ay - 1) / 12, ay, aylikKwh: (h.evYillik + r.aracKwh) / 12 });
+  const ayAd = i => ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'][(i - 1) % 12];
+  $('evSonuc').innerHTML = `Aracın evde yılda yaklaşık <strong>${sayi(r.aracKwh)} kWh</strong> çeker; ev ile birlikte <strong>${sayi(r.toplam)} kWh</strong>. `
+    + (r.asar
+      ? `Bu, mesken için ${sayi(MESKEN_SINIRI)} kWh'lik son kaynak sınırını aşıyor. Sınır aşılınca, aşılan ayı izleyen üçüncü ayın başından itibaren tedarikçinle ikili anlaşman yoksa yüksek tüketimli tarife uygulanabilir; bir önceki yıldaki aşım da sayılıyor. `
+        + (a && !a.zaten ? `Bu tempoyla sınır ${ayAd(a.ay)} ayında aşılır; yüksek tarife ${a.ay + 3 > 12 ? 'gelecek yıl ' : ''}${ayAd(a.uygulama)} başından itibaren uygulanabilir. ` : '')
+        + `Evde en fazla yaklaşık ${sayi(r.sinirKm)} km'lik şarj sınırın altında kalıyor. Tedarikçilerin yüksek tüketimli aboneler için ikili anlaşma teklifleri var; karşılaştırmaya değer.`
+      : `Sınırın (${sayi(MESKEN_SINIRI)} kWh) altında kalıyorsun; evde yaklaşık ${sayi(r.sinirKm)} km'ye kadar şarj sınırı aşmaz.`)
+    + (h.evTl ? ` Ev şarjı km başına yaklaşık ${sayi(170 / 1000 / 0.9 * h.evTl, 2)} TL.` : '');
+}
+['evTl', 'evYillik', 'yillikKm', 'evPay'].forEach(id => $(id).oninput = () => {
+  const h = durum.hesap;
+  if (id === 'evTl') h.evTl = sayiOku($('evTl').value);
+  if (id === 'evYillik') h.evYillik = sayiOku($('evYillik').value);
+  if (id === 'yillikKm') h.yillikKm = sayiOku($('yillikKm').value);
+  if (id === 'evPay') h.evPay = +$('evPay').value;
+  hesapKaydet(); evHesabi();
+});
+
+function v2lHesabi() {
+  const v = durum.hesap.v2l, a = ARACLAR[durum.arac];
+  const kap = kalibrasyon()?.kapasiteKwh || a.kap * durum.soh;
+  $('v2lSoc').value = v.soc; $('v2lSocOut').value = '%' + v.soc;
+  $('v2lAlt').value = v.alt; $('v2lAltOut').value = '%' + v.alt;
+  $('v2lCihaz').innerHTML = CIHAZLAR.map(c => `<label class="onay"><input type="checkbox" data-c="${c.id}" ${v.secili.includes(c.id) ? 'checked' : ''}> ${kacis(c.ad)} <span class="kucuk">≈ ${sayi(c.w)} W</span></label>`).join('');
+  const r = v2lSure({ soc: v.soc, kap, altSinir: v.alt, secili: v.secili });
+  $('v2lSonuc').innerHTML = !r.yukW ? 'Çalıştırmak istediğin cihazları seç.'
+    : `Toplam ortalama yük ${sayi(r.yukW)} W. Bataryada kullanılabilir ${sayi(r.kullanilabilirKwh, 1)} kWh ile yaklaşık <strong>${r.saat >= 48 ? sayi(r.gun, 1) + ' gün' : sayi(r.saat, 0) + ' saat'}</strong> yeter.`
+      + (r.asiri ? ` Dikkat: seçilenler aynı anda çalışırsa anlık çekiş ${sayi(r.tepeW)} W'a çıkabilir; V2L en fazla ${sayi(V2L_SINIR_KW, 1)} kW veriyor. Güçlü cihazları sırayla çalıştır.` : '')
+      + ' Güçler tipik değerlerdir; aracın V2L alt sınırını araç menüsünden aynı değere ayarla.';
+}
+['v2lSoc', 'v2lAlt'].forEach(id => $(id).oninput = () => {
+  durum.hesap.v2l[id === 'v2lSoc' ? 'soc' : 'alt'] = +$(id).value; hesapKaydet(); v2lHesabi();
+});
+$('v2lCihaz').onchange = e => {
+  const c = e.target.dataset.c; if (!c) return;
+  const s = new Set(durum.hesap.v2l.secili); e.target.checked ? s.add(c) : s.delete(c);
+  durum.hesap.v2l.secili = [...s]; hesapKaydet(); v2lHesabi();
+};
+$('hesapDugme').onclick = () => { fiyatListesi(); evHesabi(); v2lHesabi(); $('hesapDialog').showModal(); };
+$('hesapDialog').onclose = () => { if (durum.sonuclar.length) ciz(); };
 aracYaz();

@@ -17,10 +17,10 @@ Durum: ☐ yapılacak · ◐ sürüyor · ☑ bitti
 
 | # | Özellik | Kabul ölçütü | Durum |
 |---|---|---|---|
-| B1 | Otomatik bölümleme | Başlangıç–varıştan rota; limit ya da yol sınıfı değişiminde yeni bölüm; etiketsiz limitler "tahmini" işaretli | ☐ |
-| B2 | Rakım profili | Tırmanış ve iniş ayrı toplanır (net fark değil); örnek rotada toplam tırmanış DEM ile ±%10 | ☐ |
-| B3 | Hızlanma ve geçiş kayıpları | Limit düşüşleri, dönel kavşak ve ışık sayılır; geçiş başına ΔKE × (1 − rejenerasyon verimi) eklenir | ☐ |
-| B4 | Alternatif rota karşılaştırma | En az iki rota: toplam süre, enerji, durak sayısı, maliyet yan yana | ☐ |
+| B1 | Otomatik bölümleme | Başlangıç–varıştan rota; limit ya da yol sınıfı değişiminde yeni bölüm; etiketsiz limitler "tahmini" işaretli | ☑ |
+| B2 | Rakım profili | Tırmanış ve iniş ayrı toplanır (net fark değil); 200 m yeniden örnekleme + 10 m histerezis | ☑ |
+| B3 | Hızlanma ve geçiş kayıpları | Akış hızı çukurları + yoğunluk tabanlı yerleşim geçişleri; ΔKE × (1/verim − rejen) | ◐ veri zayıf |
+| B4 | Alternatif rota karşılaştırma | En az iki rota: toplam süre, enerji, durak sayısı, maliyet yan yana | ◐ motor hazır, arayüz yok |
 | B5 | Çevrimdışı önbellek | Planlanmış rota bağlantısız açılır ve yeniden hesaplanır | ☐ |
 
 ## C. Hava
@@ -89,3 +89,40 @@ Durum: ☐ yapılacak · ◐ sürüyor · ☑ bitti
 | Hava | Open-Meteo | Kullanım koşulları doğrulanacak |
 | İstasyon | Open Charge Map, EPDK Şarj@TR | Kapsam ve API erişimi doğrulanacak |
 | Araç | OBD (UDS 0x22, BMS 7E4) | Bluelink kapsam dışı: seyrek ve Türkiye desteği belirsiz |
+
+## Gerçek veriyle doğrulama (20.09.2026, Ankara Kızılay → Kahramanmaraş)
+
+FOSSGIS açık Valhalla sunucusu, `auto` maliyet modeli, iki alternatif. Model: 63 kWh RWD, 2.150 kg, 20 °C, rüzgârsız.
+
+| Rota | km | Bölüm | Tırmanış | İniş | Enerji (limitte) | Enerji (%92) | Süre (%92) | Valhalla süre |
+|---|---|---|---|---|---|---|---|---|
+| Otoyol (Niğde–Adana) | 685 | 20 | 7.113 m | 7.406 m | 163,3 kWh | 153,5 kWh | 6,87 sa | 6,45 sa |
+| Alternatif (Kayseri–Göksun) | 601 | 22 | 5.571 m | 5.920 m | 127,1 kWh | 118,8 kWh | 7,04 sa | 6,65 sa |
+
+Çıkarım: otoyol 84 km daha uzun ve limitleri yüksek (274 km'si 140), bu yüzden **%29 daha fazla enerji** istiyor —
+bir şarj durağı farkı. Süreler birbirine yakın. Bu karşılaştırmayı sabit tüketimli araçlar göstermez.
+
+### Bu koşuda görülen veri sınırları
+
+- **Limit kapsamı.** Otoyol rotasının %92'sinde OSM limit etiketi var; alternatif rotanın 355 km'sinde yok,
+  yol sınıfından varsayılan atanıyor ve "tahmini" işaretleniyor.
+- **Yerleşim geçişleri güvenilir değil.** 601 km'lik alternatif rotada yalnızca 9 geçiş bulunabildi
+  (toplam 0,5 kWh). Valhalla'nın akış hızı devlet yollarında kasabalarda düşmüyor; yoğunluk (density ≥ 8)
+  etiketi de yalnızca 27 km'yi yerleşim sayıyor. Gerçek kayıp bunun birkaç katı olmalı.
+  Kalıcı çözüm: OBD sürüş kaydından gerçek hız profilini öğrenmek (A3, H1).
+- **DEM gürültüsü.** Ham yükseklik örnekleri virajda 10 m aralıklı; doğrudan toplanınca otoyol rotasında
+  11.369 m tırmanış çıkıyor. 200 m'ye yeniden örnekleme + 10 m histerezis bunu 7.113 m'ye indiriyor.
+  Tünel ve viyadüklerde DEM araziyi gösterdiği için bir miktar fazlalık kalıyor.
+- **Akış oranı artık ölçülü.** Bölüm süresi, yol tipine göre sabit katsayı yerine Valhalla'nın o bölümdeki
+  ortalama hızı / limit oranıyla hesaplanıyor. Toplam süreler Valhalla'nınkine %6 içinde yaklaşıyor.
+
+## Maliyet, ev elektriği, V2L, ölçülmüş şarj gücü (Eylül 2026)
+
+- **Yolculuk maliyeti:** her durakta operatöre göre tutar; özet toplam, evde doldurulan kısım ve km başı TL.
+  Fiyatlar kullanıcı girdisi > tablo (yaklaşık, Temmuz 2026) > tahmin sırasıyla. Ücretli yol km'si ayrıca bildirilir.
+- **Ev elektriği:** EPDK mesken son kaynak sınırı (4.000 kWh/yıl, 2026) ile ev şarjının etkisi; hangi ay
+  aşılacağı ve yüksek tarifenin ne zaman başlayabileceği.
+- **Enerji ayrıştırma:** "Bu yolculukta soğuk X kWh, tırmanış Y kWh, rüzgâr Z kWh ekliyor."
+- **V2L:** seçilen cihazlarla kesintide kaç saat/gün; 3,6 kW anlık sınır uyarısı.
+- **Ölçülmüş şarj gücü (yerel):** OBD kaydındaki DC şarj, GPS ile istasyona eşlenir; durak kartında
+  "senin ölçümün". Paylaşım henüz yok; tasarımı ayrı karar.

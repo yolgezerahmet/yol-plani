@@ -4,6 +4,7 @@ import { ElmOturum, coz220101, hex, kesifTara } from './core/obd.js';
 import { bleBaglan } from './core/ble.js';
 import { sarjOturumlari, sicaklikTablosu, kapasiteTahmini, tuketimKatsayisi } from './core/kalibrasyon.js';
 import { mesafeKm } from './core/istasyon.js';
+import { olcumOzeti } from './core/olcum.js';
 
 const $ = id => document.getElementById(id);
 const sayi = (x, b = 0) => x == null || Number.isNaN(x) ? '–' : Number(x).toLocaleString('tr-TR', { maximumFractionDigits: b, minimumFractionDigits: b });
@@ -15,6 +16,8 @@ const EN_FAZLA = 8000;   // ~2 MB; 5 sn aralıkla ~11 saat
 
 const obd = { tampon: [], oturum: null, baglanti: null, zamanlayici: null, izleme: null, km: 0, sonKonum: null, gunluk: [], yolculuk: null };
 export const kalibrasyon = () => depo.al('kalibrasyon', null);
+// İstasyon no → en son ölçümler (yalnızca bu telefonda).
+export const olcumler = () => depo.al('olcumler', []);
 
 function gunlukYaz(k, y) {
   obd.gunluk.push(`> ${k}\n${String(y).trim()}`);
@@ -95,6 +98,8 @@ function kaydiBaslat(plan) {
       const { d, ham } = await oku();
       const o = { t: Date.now(), soc: d.socBms, gucKw: d.gucKw, bataryaMinT: d.bataryaMinT, bataryaMaxT: d.bataryaMaxT,
                   cecKwh: d.cecKwh, cedKwh: d.cedKwh, dcSarj: d.dcSarj, km: +obd.km.toFixed(2), ham };
+      // Konum yalnızca DC şarj sırasında ve yalnızca istasyonu eşlemek için saklanır.
+      if (d.dcSarj && obd.sonKonum) { o.enlem = +obd.sonKonum[0].toFixed(5); o.boylam = +obd.sonKonum[1].toFixed(5); }
       obd.tampon.push(o);
       // Depoya dakikada bir yazılır: 2 MB'lık listeyi her 5 saniyede yeniden yazmak pili yorar.
       if (obd.tampon.length >= 12) tamponuYaz();
@@ -122,7 +127,7 @@ function kaydiDurdur() {
   obd.yolculuk = null;
 }
 
-export function kalibrasyonGuncelle(olcek = 1) {
+export function kalibrasyonGuncelle(olcek = 1, istasyonlar = []) {
   tamponuYaz();
   const ornekler = depo.al('obd:ornekler', []);
   const oturumlar = sarjOturumlari(ornekler);
@@ -137,6 +142,13 @@ export function kalibrasyonGuncelle(olcek = 1) {
     tuketimKat: tk.yolculuk ? tk.kat : null, yolculuk: tk.yolculuk,
   };
   depo.koy('kalibrasyon', k);
+  if (istasyonlar.length) {
+    const yeni = oturumlar.map(o => ({ bas: o.bas, ...olcumOzeti(o, istasyonlar, { olcek, tablo: k.sicaklikTablosu || undefined }) }))
+      .filter(o => o.istasyonNo);
+    const eski = olcumler().filter(o => !yeni.some(y => y.bas === o.bas));
+    depo.koy('olcumler', eski.concat(yeni).slice(-300));
+    k.olcum = yeni.length;
+  }
   return k;
 }
 
@@ -146,10 +158,12 @@ export function kalibrasyonMetni(k = kalibrasyon()) {
   p.push(`${k.oturum} şarj oturumu, ${k.olculenDilim} sıcaklık dilimi ölçüldü`);
   if (k.kapasiteKwh) p.push(`kullanılabilir kapasite ≈ ${sayi(k.kapasiteKwh, 1)} kWh`);
   if (k.tuketimKat) p.push(`tüketim modelin %${sayi(k.tuketimKat * 100)}'i (${k.yolculuk} yolculuk)`);
+  const o = olcumler();
+  if (o.length) p.push(`${o.length} şarj bir istasyonla eşlendi${o.some(x => x.dusuk) ? `, ${o.filter(x => x.dusuk).length} tanesi beklenenin belirgin altında` : ''}`);
   return p.join('; ') + `. Güncelleme: ${k.tarih}.`;
 }
 
-export function obdPaneli({ planGetir, olcekGetir }) {
+export function obdPaneli({ planGetir, olcekGetir, istasyonlarGetir = async () => [] }) {
   $('obdDugme').onclick = () => { $('obdKalib').textContent = kalibrasyonMetni(); $('obdDialog').showModal(); };
   $('obdBaglan').onclick = baglan;
   $('obdOku').onclick = tekOku;
@@ -158,10 +172,14 @@ export function obdPaneli({ planGetir, olcekGetir }) {
     try { await navigator.clipboard.writeText(obd.gunluk.join('\n\n')); durum('Ham çıktı panoya kopyalandı.'); }
     catch { durum('Panoya kopyalanamadı; metni uzun basıp seçebilirsin.', true); }
   };
-  $('obdGuncelle').onclick = () => { $('obdKalib').textContent = kalibrasyonMetni(kalibrasyonGuncelle(olcekGetir())); };
+  $('obdGuncelle').onclick = async () => {
+    let ist = [];
+    try { ist = await istasyonlarGetir(); } catch {}
+    $('obdKalib').textContent = kalibrasyonMetni(kalibrasyonGuncelle(olcekGetir(), ist));
+  };
   $('obdSil').onclick = () => {
     if (!confirm('Telefondaki tüm OBD kayıtları ve kalibrasyon silinsin mi?')) return;
-    ['obd:ornekler', 'obd:yolculuklar', 'kalibrasyon'].forEach(k => localStorage.removeItem(k));
+    ['obd:ornekler', 'obd:yolculuklar', 'kalibrasyon', 'olcumler'].forEach(k => localStorage.removeItem(k));
     $('obdKalib').textContent = kalibrasyonMetni(null); $('obdKayitBilgi').textContent = '';
   };
 }

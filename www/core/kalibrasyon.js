@@ -23,7 +23,7 @@ export function sarjOturumlari(ornekler, { boslukMs = 5 * 60000 } = {}) {
     kwh: s[s.length - 1].cecKwh != null && s[0].cecKwh != null ? +(s[s.length - 1].cecKwh - s[0].cecKwh).toFixed(1) : null,
     T0: s[0].bataryaMinT, T1: s[s.length - 1].bataryaMinT,
     tepeKw: Math.max(...s.map(x => -x.gucKw)),
-    noktalar: s.map(x => ({ soc: x.soc, kw: -x.gucKw, T: x.bataryaMinT })),
+    noktalar: s.map(x => ({ soc: x.soc, kw: -x.gucKw, T: x.bataryaMinT, enlem: x.enlem, boylam: x.boylam })),
   }));
 }
 
