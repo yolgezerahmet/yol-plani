@@ -55,6 +55,54 @@ export function coz220101(b) {
   return d;
 }
 
+// ---- Diğer modüller ---------------------------------------------------------------------
+// Bayt yerleşimleri iki bağımsız açık kaynak projenin ÇAKIŞAN alanlarından alındı:
+//   evDash (nickn17, MIT) src/CarHyundaiEgmp.cpp — birleştirilmiş yanıtta onaltılık karakter indisi
+//   WiCAN (meatpiHQ) vehicle_profiles/hyundai/ioniq5-6.json — ham CAN çerçevesi bayt indisi (B..)
+// İkisi farklı indis sistemleri kullanır; 0x62'den sayılan yük indisine çevrilince aşağıdaki alanların
+// hepsi birebir örtüşüyor. "tek kaynak" notlu alanlar yalnız birinde var. 2026 araçta DOĞRULANMADI.
+// WiCAN B indisi → yük indisi: çerçeve n = ⌊B/8⌋; n=0: B−2; n≥1: 6 + 7(n−1) + (B − 8n − 1).
+export const wicanYukIndisi = B => { const n = Math.floor(B / 8); return n === 0 ? B - 2 : 6 + 7 * (n - 1) + (B - 8 * n - 1); };
+
+const basla = (b, a, c, d, enAz, ad) => {
+  if (b[0] !== a || b[1] !== c || b[2] !== d) throw new Error(ad + ' yanıtı değil');
+  if (b.length < enAz) throw new Error(`${ad} yanıtı kısa: ${b.length} bayt`);
+};
+const aralik = (v, a, u) => (v >= a && v <= u ? v : null);
+
+// BMS 7E4 220105: sağlık, gösterge SoC'si, hücre sapması.
+export function coz220105(b) {
+  basla(b, 0x62, 0x01, 0x05, 42, '220105');
+  return {
+    sohYuzde: aralik(u16(b, 28) / 10, 50, 100),        // iki kaynak
+    socGosterge: aralik(b[34] / 2, 0, 100),            // iki kaynak; BMS SoC'sinden farkı tamponu verir
+    hucreSapmaV: aralik(b[23] / 50, 0, 1),             // tek kaynak (WiCAN)
+  };
+}
+// BMS 7E4 220106: soğutma suyu sıcaklığı. Şarj biti tek kaynak (evDash).
+export function coz220106(b) {
+  basla(b, 0x62, 0x01, 0x06, 28, '220106');
+  return { sogutmaSuyuC: aralik(s8(b[7]), -30, 120), sarjBiti: (b[27] & 1) === 1 };
+}
+// TPMS 7A0 22C00B: basınç 0,2 psi adımlı; sıcaklık −50 kaydırmalı. İki kaynak.
+const PSI_BAR = 14.5038;
+export function coz22C00B(b) {
+  basla(b, 0x62, 0xC0, 0x0B, 24, '22C00B');
+  const teker = i => ({ bar: aralik(+(b[i] * 0.2 / PSI_BAR).toFixed(2), 0.5, 4.5), C: aralik(b[i + 1] - 50, -40, 120) });
+  return { onSol: teker(7), onSag: teker(12), arkaSol: teker(17), arkaSag: teker(22) };
+}
+// Gösterge 7C6 22B002: kilometre sayacı, 3 bayt. İki kaynak.
+export function coz22B002(b) {
+  basla(b, 0x62, 0xB0, 0x02, 12, '22B002');
+  return { odoKm: aralik((b[9] << 16) | (b[10] << 8) | b[11], 0, 2000000) };
+}
+// Klima 7B3 220100: iç ve dış sıcaklık, (x/2)−40. İki kaynak.
+export function coz220100(b) {
+  basla(b, 0x62, 0x01, 0x00, 10, '220100');
+  return { icC: aralik(b[8] / 2 - 40, -40, 80), disC: aralik(b[9] / 2 - 40, -40, 60) };
+}
+export const COZUCULER = { '220105': coz220105, '220106': coz220106, '22C00B': coz22C00B, '22B002': coz22B002, '220100': coz220100 };
+
 // Ham yanıtı saklanabilir onaltılık metne çevirir. Kayıtta çözülmüş değerlerin yanında ham bayt
 // da tutulur: ileride bir alanın anlamı düzeltilirse eski kayıtlar yeniden çözülebilir.
 export const hex = b => b.map(x => x.toString(16).padStart(2, '0')).join('');
@@ -97,8 +145,8 @@ export class ElmOturum {
 // ---- Keşif taraması -------------------------------------------------------------------------
 // E-GMP'nin başka modüllerinde yolculuk hesabına doğrudan yarayan veriler var. Aşağıdaki
 // başlık/PID çiftleri 2021–24 araçların topluluk tablolarından; 2026 aracında yanıt verip
-// vermedikleri ve bayt yerleşimleri BİLİNMİYOR. Bu yüzden burada çözülmez: ham yanıt toplanır,
-// ilk gerçek çıktıyla çözücü yazılır ve testi eklenir.
+// vermedikleri bilinmiyor. Çözücüler açık kaynak tablolarına dayanır (yukarıda); ham yanıt da saklanır,
+// ilk gerçek çıktıyla doğrulanır.
 export const KESIF = [
   { baslik: '7E4', pid: '220105', ne: 'BMS: SoH, hücre sapması, soğutma suyu' },
   { baslik: '7E4', pid: '220106', ne: 'BMS: soğutma/ısıtma durumu' },
@@ -118,7 +166,9 @@ export async function kesifTara(oturum, liste = KESIF) {
       const ham = await oturum.komut(g.pid);
       let bayt = null;
       try { bayt = elmBaytlari(ham); } catch { /* NO DATA vb. */ }
-      sonuc.push({ ...g, yanit: !!bayt?.length, uzunluk: bayt?.length ?? 0, hex: bayt ? hex(bayt) : String(ham).trim() });
+      let deger = null;
+      try { if (bayt?.length && COZUCULER[g.pid]) deger = COZUCULER[g.pid](bayt); } catch { /* yerleşim farklı olabilir; ham saklanır */ }
+      sonuc.push({ ...g, yanit: !!bayt?.length, uzunluk: bayt?.length ?? 0, hex: bayt ? hex(bayt) : String(ham).trim(), deger });
     } catch (e) {
       sonuc.push({ ...g, yanit: false, uzunluk: 0, hex: e.message });
     }

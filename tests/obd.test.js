@@ -89,3 +89,43 @@ test('keşif taraması başlık değiştirir, yanıtsızı atlar, BMS başlığ�
   assert.equal(r[2].yanit, false, 'NO DATA yanıt sayılmaz');
   assert.deepEqual(t.giden.filter(g => g.startsWith('ATSH')), ['ATSH7E4', 'ATSH7C6', 'ATSH7E4']);
 });
+
+import { wicanYukIndisi, coz220105, coz220106, coz22C00B, coz22B002, coz220100, kesifTara as _kt } from '../www/core/obd.js';
+
+test('WiCAN çerçeve indisi → yük indisi: iki açık kaynak aynı baytı gösteriyor', () => {
+  // evDash karakter indisi / 2 = yük indisi
+  assert.equal(wicanYukIndisi(34), 56 / 2);   // SoH
+  assert.equal(wicanYukIndisi(41), 68 / 2);   // gösterge SoC
+  assert.equal(wicanYukIndisi(10), 14 / 2);   // ön sol basınç
+  assert.equal(wicanYukIndisi(15), 24 / 2); assert.equal(wicanYukIndisi(21), 34 / 2); assert.equal(wicanYukIndisi(27), 44 / 2);
+  assert.equal(wicanYukIndisi(12), 18 / 2);   // kilometre sayacı ilk baytı
+  assert.equal(wicanYukIndisi(11), 16 / 2); assert.equal(wicanYukIndisi(12), 18 / 2); // iç, dış sıcaklık
+  assert.equal(wicanYukIndisi(10), 7);        // 220101 SoC: mevcut çözücüyle aynı
+});
+
+const dolu = (n, ilk, yaz) => { const b = new Array(n).fill(0); ilk.forEach((v, i) => b[i] = v); for (const [i, v] of Object.entries(yaz)) b[+i] = v; return b; };
+
+test('220105: SoH, gösterge SoC, hücre sapması', () => {
+  const d = coz220105(dolu(46, [0x62, 0x01, 0x05], { 28: 0x03, 29: 0xE8, 34: 170, 23: 1 }));
+  assert.equal(d.sohYuzde, 100); assert.equal(d.socGosterge, 85); assert.equal(d.hucreSapmaV, 0.02);
+  assert.equal(coz220105(dolu(46, [0x62, 0x01, 0x05], { 28: 0xFF, 29: 0xFF })).sohYuzde, null);   // aralık dışı → null
+  assert.throws(() => coz220105([0x62, 0x01, 0x05, 0]), /kısa/);
+});
+
+test('22C00B lastik, 22B002 kilometre, 220100 sıcaklık, 220106 soğutma suyu', () => {
+  const t = coz22C00B(dolu(26, [0x62, 0xC0, 0x0B], { 7: 181, 8: 72, 12: 180, 13: 71, 17: 178, 18: 70, 22: 179, 23: 70 }));
+  assert.equal(t.onSol.bar, 2.5); assert.equal(t.onSol.C, 22); assert.equal(t.arkaSag.bar, 2.47);
+  assert.equal(coz22B002(dolu(14, [0x62, 0xB0, 0x02], { 9: 0x00, 10: 0x30, 11: 0x39 })).odoKm, 12345);
+  const k = coz220100(dolu(12, [0x62, 0x01, 0x00], { 8: 124, 9: 70 }));
+  assert.equal(k.icC, 22); assert.equal(k.disC, -5);
+  const s = coz220106(dolu(30, [0x62, 0x01, 0x06], { 7: 0xF6, 27: 0x21 }));
+  assert.equal(s.sogutmaSuyuC, -10); assert.equal(s.sarjBiti, true);
+});
+
+test('keşif taraması çözebildiğini çözer, çözemediğinde hamı saklar', async () => {
+  const yanit = { '22B002': '62 B0 02 00 00 00 00 00 00 00 30 39 00 00', '220105': '62 01 05 00' };
+  const oturum = { komut: async k => (k.startsWith('AT') ? 'OK' : yanit[k] ?? 'NO DATA') };
+  const r = await _kt(oturum, [{ baslik: '7C6', pid: '22B002', ne: 'odo' }, { baslik: '7E4', pid: '220105', ne: 'soh' }]);
+  assert.equal(r[0].deger.odoKm, 12345);
+  assert.equal(r[1].deger, null); assert.equal(r[1].yanit, true);
+});

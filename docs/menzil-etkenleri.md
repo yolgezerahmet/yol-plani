@@ -12,7 +12,7 @@ Katsayı kaynağı: [Ö] ölçüm/standart, [L] literatür, [T] tahmin.
 | Açık cam (CdA +%5), römork ve karavan (kütle + CdA) | M [L/T] | kullanim.js |
 | Yuvarlanma direnci: kütle, yol yüzeyi (OSM), soğuk lastik | M | model.js, rota.js |
 | Lastik türü (yaz, dört mevsim, kış) | M [L] | kullanim.js |
-| Lastik basıncı: kullanıcı seçimi, Crr ∝ p^-0,4; TPMS (7A0/22C00B) okunacak | M [L] | kullanim.js |
+| Lastik basıncı: kullanıcı seçimi, Crr ∝ p^-0,4; TPMS (7A0/22C00B) çözücüsü var, plana bağlanacak | M [L] | kullanim.js, obd.js |
 | Islak yol: yağış şiddetine göre kademeli (+%6/12/20); karlı zemin (+%35) | M [L/T] | fizik.js |
 | Tırmanış ve iniş; rejenerasyon verimi, soğukta ve dolu bataryada kısılma | M [T] | fizik.js |
 | Yük: kişi sayısı, bagaj | M | kullanim.js |

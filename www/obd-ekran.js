@@ -66,6 +66,18 @@ async function tekOku() {
     const k = await kesifTara(obd.oturum);
     depo.koy('obd:kesif', { t: Date.now(), sonuc: k });
     const var_ = k.filter(x => x.yanit);
+    // Açık kaynak tablolarıyla çözülen değerler: ekranda "doğrulanmadı" notuyla gösterilir.
+    const v = Object.assign({}, ...k.filter(x => x.deger).map(x => x.deger));
+    const ek = [];
+    if (v.sohYuzde != null) ek.push(['Batarya sağlığı (SoH)', `%${sayi(v.sohYuzde, 1)}`]);
+    if (v.socGosterge != null) ek.push(['Gösterge SoC', `%${sayi(v.socGosterge, 1)}`]);
+    if (v.sogutmaSuyuC != null) ek.push(['Batarya soğutma suyu', `${sayi(v.sogutmaSuyuC)} °C`]);
+    if (v.disC != null) ek.push(['Dış / iç sıcaklık', `${sayi(v.disC, 1)} / ${sayi(v.icC, 1)} °C`]);
+    if (v.odoKm != null) ek.push(['Kilometre', `${sayi(v.odoKm)} km`]);
+    if (v.onSol?.bar != null) ek.push(['Lastik basıncı (bar)', [v.onSol, v.onSag, v.arkaSol, v.arkaSag].map(t => sayi(t.bar, 2)).join(' · ')]);
+    if (ek.length) $('obdDegerler').insertAdjacentHTML('beforeend',
+      ek.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join('') + '<dt>Not</dt><dd>Bu ek değerler açık kaynak tablolarıyla çözüldü; gösterge panelindeki değerlerle karşılaştır.</dd>');
+    depo.koy('obd:arac', { t: Date.now(), ...v });
     durum(`${var_.length}/${k.length} modül yanıt verdi: ${var_.map(x => x.ne.split(':')[0]).join(', ') || 'yok'}. `
       + '"Ham çıktıyı kopyala" ile paylaşırsan çözücüleri yazarım.');
   } catch (e) { durum('Okuma hatası: ' + e.message, true); }
